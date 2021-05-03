@@ -1,0 +1,53 @@
+#pragma once
+
+#include <string>
+#include <cctype>
+#include <cwctype>
+
+#define MAX_GUID 40
+
+namespace MaxVRStringConversion
+{
+	std::string const ws2s(std::wstring const& wstr);
+
+	std::wstring const s2ws(std::string const& str);
+
+	std::string const getCOMError2s(HRESULT const& hr);
+
+	struct case_insensitive_less
+	{
+		bool const operator () (wchar_t const x, wchar_t const y) const
+		{
+			return(towlower(x) < towlower(y));
+		}
+	};
+	bool const NoCaseLess(std::wstring const& a, std::wstring const& b);
+
+	inline std::wstring const trim(const std::wstring &s)
+	{
+		auto const wsfront = std::find_if_not(s.begin(), s.end(), std::iswspace);
+		auto const wsback = std::find_if_not(s.rbegin(), s.rend(), std::iswspace).base();
+		return (wsback <= wsfront ? std::wstring() : std::wstring(wsfront, wsback));
+	}
+	inline std::string const trim(const std::string &s)
+	{
+		auto const wsfront = std::find_if_not(s.begin(), s.end(), std::isspace);
+		auto const wsback = std::find_if_not(s.rbegin(), s.rend(), std::isspace).base();
+		return (wsback <= wsfront ? std::string() : std::string(wsfront, wsback));
+	}
+
+	inline std::wstring const& removeAllWhiteSpace(std::wstring &s)
+	{
+		s.erase(remove_if(s.begin(), s.end(), iswspace), s.end());
+		return(s);
+	}
+	inline std::string const& removeAllWhiteSpace(std::string &s)
+	{
+		s.erase(remove_if(s.begin(), s.end(), isspace), s.end());
+		return(s);
+	}
+	inline void toLower(std::wstring& rsIn)
+	{
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), towlower);
+	}
+}

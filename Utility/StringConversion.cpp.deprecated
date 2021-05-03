@@ -1,0 +1,44 @@
+#include "stdafx.h"
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+#include "StringConversion.h"
+#include <locale>
+#include <codecvt>
+#include <comdef.h>
+
+namespace MaxVRStringConversion
+{
+	typedef std::codecvt_utf8<wchar_t> convert_typeX;
+
+	std::string const ws2s(std::wstring const& wstr)
+	{
+		std::wstring_convert<convert_typeX, wchar_t> converterX;
+
+		return(converterX.to_bytes(wstr));
+	}
+
+	std::wstring const s2ws(std::string const& str)
+	{
+		std::wstring_convert<convert_typeX, wchar_t> converterX;
+
+		return(converterX.from_bytes(str));
+	}
+
+	std::string const getCOMError2s(HRESULT const& hr)
+	{
+		try
+		{
+			_com_error err(hr);
+			TCHAR const* const errMsg = err.ErrorMessage();
+			return(ws2s(errMsg));
+		}
+		catch (...)
+		{
+			return("Throw Error");
+		}
+	}
+
+	bool const NoCaseLess(std::wstring const& a, std::wstring const& b)
+	{
+		return(std::lexicographical_compare(a.cbegin(), a.cend(), b.cbegin(), b.cend(), case_insensitive_less()));
+	}
+}
