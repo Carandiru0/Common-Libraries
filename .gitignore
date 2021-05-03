@@ -1,6 +1,7 @@
 # Other project files
 *.d
 *.db
+*.pdb
 *.suo
 *.log
 *.tlog
