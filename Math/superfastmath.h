@@ -1209,6 +1209,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 #define SRGB_to_FLOAT SFM::XMColorSRGBToRGB
 
+	STATIC_INLINE_PURE uint32_t const srgb_to_linear_rgba(uint32_t const packed)
+	{
+		uvec4_t rgba;
+		SFM::unpack_rgba(packed, rgba);
+
+		static constexpr float const NORMALIZE = 1.0f / float(UINT8_MAX);
+		static constexpr float const DENORMALIZE = float(UINT8_MAX);
+
+		XMVECTOR xmColor = XMVectorMultiply(_mm_set1_ps(NORMALIZE), uvec4_v(rgba).v4f());
+		xmColor = SFM::XMColorSRGBToRGB(xmColor);
+		SFM::saturate_to_u8(XMVectorMultiply(_mm_set1_ps(DENORMALIZE), xmColor), rgba);
+
+		return( SFM::pack_rgba(rgba) );
+	}
+
 	//------------------------------------------------------------------------------
 	// gamma (linear->srgb) function, leverages faster pow function
 	// vector in must be in 0.0f -> 1.0f range
