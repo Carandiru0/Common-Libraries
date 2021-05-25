@@ -137,7 +137,11 @@ typedef struct alignas(32) sRandom
 	uint64_t	hashSeed;
 
 	bool Initialized = false;
+
+	static inline std::atomic_uint64_t instance{0};
 } Random;
+
+// redefinition inline std::atomic_uint64_t sRandom::instance(0);
 
 /* [xoshiro256** 1.0] */
 // http://prng.di.unimi.it
@@ -373,17 +377,20 @@ uint32_t const Hash(int32_t const data)
 }
 
 // private for init only  //
-static void InitializeRandomNumberGeneratorInstance()
-{
-	oRandom = oRandomMaster;
-}
-// private for init only  //
 static __inline void SetXorShiftState(uint64_t const seed)
 {
 	__m256i const pendingState(_mm256_add_epi64(_mm256_set1_epi64x(seed),
 							   _mm256_set_epi64x(XORSHIFT_STATE_RESET[0], XORSHIFT_STATE_RESET[1], XORSHIFT_STATE_RESET[2], XORSHIFT_STATE_RESET[3]))); // psuedo rng seeds must be non zero
 	oRandom.xorshift_state = HashState(pendingState); // high quality hash of state before handoff to xorshift state
 }
+
+// private for init only  //
+static void InitializeRandomNumberGeneratorInstance()
+{
+	oRandom = oRandomMaster;
+	SetXorShiftState(oRandom.hashSeed + ++oRandom.instance);
+}
+
 // private for init only  //
 static void PsuedoSetSeed(int64_t Seed)
 {
