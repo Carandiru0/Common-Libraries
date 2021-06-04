@@ -481,6 +481,13 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 
 	// Extended sign: returns -1, 0 or 1 based on sign of a
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall sgn(FXMVECTOR const a)
+	{
+		XMVECTOR const xmP(XMVectorSelect(_mm_setzero_ps(), _mm_set1_ps(1.0f), XMVectorGreater(a, _mm_setzero_ps())));
+		XMVECTOR const xmN(XMVectorSelect(_mm_setzero_ps(), _mm_set1_ps(-1.0f), XMVectorLess(a, _mm_setzero_ps())));
+
+		return(XMVectorAdd(xmP, xmN));
+	}
 	STATIC_INLINE_PURE float const __vectorcall sgn(float const a)
 	{
 		if (a > 0.0f)
@@ -644,6 +651,33 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		// The final result.
 		return (__fma(A, xmCos, XMVectorMultiply(xmRelative, xmSin)));
 	}
+
+	// spherical coordinate generation by golden ratio
+	// https://www.shadertoy.com/view/wtByz1 - sphere plotted with point generated from golden ratio.
+	// this is a modified function derived from above.
+	// takes an input of 1D values, the current iteration value, and the maximum value or number of values used
+	// returns 3D point on surface of sphere equidistance from other points
+	namespace constants
+	{	// g value is scaled to work with same number of bits to shift, see: https://www.desmos.com/calculator/deqrvwazm9
+		XMGLOBALCONST inline float const _golden{ XM_PI * (1.0f + SFM::__sqrt(5.0f)) };
+	} // end ns
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall golden_sphere_coord(float const iteration, float const max_iterations)
+	{
+		float const phi = SFM::__acos_approx(1.0f - 2.0f * (iteration + 0.5f) / max_iterations);
+
+		float const theta = constants::_golden * iteration;
+
+		float cphi, sphi;
+		sphi = SFM::sincos(&cphi, phi);;
+
+		float c, s;
+		s = SFM::sincos(&c, theta);
+
+		// this is the most natural function ever
+		return(XMVectorSet(sphi * c, sphi * s, cphi, 0.0f));
+	}
+
+
 
 	// circular interpolation
 	// recommend ease_in on one component(x|y)
@@ -1092,6 +1126,12 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(uvec4_v(_mm_div_epu32( _mm_add_epi32(_mm_mullo_epi32(A.v, alpha_A), _mm_mullo_epi32(B.v, alpha_B)), xm255)));		// SSE4.2 req for _mm_mullo_epi32
 	}
 
+	STATIC_INLINE_PURE uvec4_v const __vectorcall modulate(uvec4_v const A, uvec4_v const B)
+	{
+		__m128i const xm255(_mm_set1_epi32(255U));
+
+		return(uvec4_v(_mm_div_epu32(_mm_mullo_epi32(A.v, B.v), xm255)));		// SSE4.2 req for _mm_mullo_epi32
+	}
 	//STATIC_INLINE_PURE uint32_t const __vectorcall blend(uint8_t const A, uint8_t const B, uint8_t const weight)
 	//{
 	//	return((A + (weight * ((B - A) + 127) / 255)));
@@ -1139,6 +1179,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	STATIC_INLINE_PURE uint32_t const __vectorcall pack_rgba(uint32_t const r, uint32_t const g, uint32_t const b, uint32_t const a) {
 
 		return(((a << 24U) | (b << 16U) | (g << 8U) | r));  // ABGR = RGBA mem order
+	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall pack_rgba(uint32_t const luma) {
+
+		return(((luma << 24U) | (luma << 16U) | (luma << 8U) | luma));  // ABGR = RGBA mem order
 	}
 	STATIC_INLINE_PURE uint32_t const __vectorcall pack_rgba(uvec4_t const& __restrict rgba) {
 

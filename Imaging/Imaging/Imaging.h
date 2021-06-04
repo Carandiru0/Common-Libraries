@@ -1,5 +1,5 @@
 #pragma once
-#define INCLUDE_PNG_SUPPORT 0		// **** BUG: use a different PNG library, lodepng does not maintain lossless color - black level is way off
+#define INCLUDE_PNG_SUPPORT 0
 #define INCLUDE_JPEG_SUPPORT 0
 
 #include <stdint.h>
