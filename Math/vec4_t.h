@@ -75,11 +75,61 @@ struct alignas(16) vec4_v  // VECTOR ACCESS
 		return(_mm_cvtepi32_ps(v));
 	}
 
+private:
+	// internal private
+	template<uint32_t const num_components>
+	static __inline __declspec(noalias) consteval uint32_t const num_components_to_mask() // strictly compile time only evaluation (consteval)
+	{
+		if constexpr (1 == num_components) {
+			return(0x1);
+		}
+		else if constexpr (2 == num_components) {
+			return(0x3);
+		}
+		else if constexpr (3 == num_components) {
+			return(0x7);
+		}
 
+		return(0xf);
+	}
+public:
+	// comparison // use with overloaded comparison operators to reduce vector result contained in __m128i to a scalar result (boolean). Must specify template parameter for the number of components you care about.
+	template<uint32_t const num_components>
+	static __inline __declspec(noalias) bool const __vectorcall all(__m128i const test) {
+		constexpr uint32_t const mask(num_components_to_mask<num_components>());
+
+		return(((_mm_movemask_ps(_mm_castsi128_ps(test)) & mask) == mask) != 0);
+	}
+	template<uint32_t const num_components>
+	static __inline __declspec(noalias) bool const __vectorcall any(__m128i const test) {
+		constexpr uint32_t const mask(num_components_to_mask<num_components>());
+
+		return((_mm_movemask_ps(_mm_castsi128_ps(test)) & mask) != 0);
+	}
+
+	// comparison operators // use with static functions [any, all] for boolean result. These return a __m128i containing the "vector" result of the comparison.
+	__inline __m128i const __vectorcall operator==(vec4_v const& __restrict rhs) const {
+		return(_mm_cmpeq_epi32(v, rhs.v));
+	}
+	__inline __m128i const __vectorcall operator!=(vec4_v const& __restrict rhs) const {
+		// there is no "neq" intrinsic, workaround by complementing the "eq" intrinsic result - overhead of extra intrinsics is neglible, _mm_and_not_si128 is very fast.
+		return(_mm_andnot_si128(_mm_cmpeq_epi32(v, rhs.v), _mm_set1_epi32(0xFFFFFFFF)));   // !(a == b) & 1
+	}
+	__inline __m128i const __vectorcall operator>(vec4_v const& __restrict rhs) const {
+		return(_mm_cmpgt_epi32(v, rhs.v));
+	}
+	__inline __m128i const __vectorcall operator<(vec4_v const& __restrict rhs) const {
+		return(_mm_cmplt_epi32(v, rhs.v));
+	}
+	// ** greater than equal and less than equal not implemented, again missing intrinsics. todo: add these functions if required in future
+	 
+	 
+	 
 	//##############################
 	__m128i v;// main vector register
 	//##############################
 
+	// ctors //
 	__forceinline explicit __vectorcall vec4_v(__m128i const v_) // loads the intrinsic register (__m128i) directly
 		: v(v_)
 	{}

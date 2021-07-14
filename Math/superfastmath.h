@@ -20,9 +20,6 @@
 
 using namespace DirectX;
 
-#pragma intrinsic(__builtin_assume_aligned)
-// #define __builtin_assume_aligned(type, c, alignment) { const_cast<type* __restrict& __restrict>(c) = static_cast<type* const __restrict>(::__builtin_assume_aligned(c, alignment)); }
-
 #define STATIC_INLINE_PURE static __inline __declspec(noalias)
 #define STATIC_INLINE static __inline
 #define NO_INLINE __declspec(noinline)
