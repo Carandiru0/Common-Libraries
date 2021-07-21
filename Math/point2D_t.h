@@ -302,12 +302,16 @@ STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_shrink(rect2D_t const a, poin
 
 STATIC_INLINE_PURE bool const __vectorcall r2D_contains(rect2D_t const a, point2D_t const b) {
 
+	// for integers there are no intrinsic functions for >= or <= let the compiler deal with this one.
+	
 	// min = left top
 	// max = right bottom
-	return (b.x >= a.left  &&
-		    b.y >= a.top   &&
-		    b.x <= a.right &&
-		    b.y <= a.bottom);
+	
+	// Check bounds
+	return ((b.x >= a.left)  &&
+		    (b.y >= a.top)   &&
+		    (b.x <= a.right) &&
+		    (b.y <= a.bottom));
 }
 #endif
 

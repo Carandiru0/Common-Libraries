@@ -391,8 +391,6 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	// sincos SVML
 	STATIC_INLINE_PURE float const __vectorcall sincos(float* const __restrict c, float const A) 
 	{
-		//__builtin_assume_aligned(c, 16ULL);
-
 		__m256 c_;
 		float const s = _mm_cvtss_f32(_mm256_castps256_ps128(_mm256_sincos_ps(&c_, _mm256_set1_ps(A))));
 		*c = _mm_cvtss_f32(_mm256_castps256_ps128(c_));
@@ -401,8 +399,6 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 	STATIC_INLINE_PURE XMVECTOR const __vectorcall sincos(XMVECTOR * const __restrict c, FXMVECTOR const A) 
 	{
-		//__builtin_assume_aligned(c, 16ULL);
-
 		__m256 c_;
 		__m128 s = _mm256_castps256_ps128(_mm256_sincos_ps(&c_, _mm256_castps128_ps256(A)));
 		*c = _mm256_castps256_ps128(c_);
