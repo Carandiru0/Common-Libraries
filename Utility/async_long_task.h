@@ -75,6 +75,16 @@ static constexpr uint32_t const HISTORY_SZ = 8;
 
 class alignas(32) async_long_task : no_copy
 {
+public:
+	enum beats
+	{
+		min = 1,
+		frame = 33,
+		half = 500,
+		full = 1000,
+		max = full
+	};
+
 private:
 	enum async_priority_t
 	{
@@ -82,7 +92,7 @@ private:
 		priority_normal = THREAD_PRIORITY_NORMAL,
 		priority_idle = THREAD_PRIORITY_IDLE
 	};
-
+	
 public:
 	template <thread_id_t const thread, typename lambda>
 	static inline task_id_t const enqueue(lambda&& work_) {  // returns task_id
@@ -266,7 +276,8 @@ public:
 		return(false); // task is finished
 	}
 	static bool const initialize(); // must be called once when appropriate at program start-up
-
+	static void cancel_all();
+	static bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX) );  // optional timeout parameter - default is infinite, 0 would simply return if a wait is needed, all other alues are milliseconds
 private:
 	template<thread_id_t const thread>
 	static inline task_id_t const _enqueue(internal_only::async_work const* const __restrict work_);
@@ -467,27 +478,53 @@ bool const async_long_task::initialize()
 	return(false);
 }
 
-async_long_task::~async_long_task() 
+bool const async_long_task::wait_for_all(milliseconds const timeout)
 {
-#if !defined(NDEBUG) && VERBOSE_LOGGING_ASYNC_LONG_TASK
-	FMT_LOG_WARN(INFO_LOG, "async long task threads  quitting...");
-#endif
-	// signal thread loop to exit //
-	_alive[background_critical].clear(); _alive[background].clear();
+	tTime tStart = critical_now();
+
+	bool bWaitState(false);
+
+	while( (bWaitState = !(_items[background_critical].empty() & _items[background].empty())) )
+	{
+		_mm_pause(); // hint to processor
+		SleepEx(beats::min, TRUE); // lower cpu usage, yield to another thread
+
+		[[unlikely]] if (critical_now() - tStart >= duration_cast<nanoseconds>(timeout)) {
+			break;
+		}
+	}
+
+	return(bWaitState);
+}
+
+void async_long_task::cancel_all()
+{
 	// abort any items in queue
 	_items[background_critical].clear(); _items[background].clear();
 	// dummy apc call which will exit the thread
 	wake_up(background_critical); wake_up(background);
 
-	SleepEx(10, FALSE); // yield to the threads
+	SleepEx(beats::frame, FALSE); // yield to the threads
+}
+
+async_long_task::~async_long_task() 
+{
+#if !defined(NDEBUG) && VERBOSE_LOGGING_ASYNC_LONG_TASK
+	FMT_LOG_WARN(INFO_LOG, "async long task threads  quitting...");
+#endif
+
+	// signal thread loop to exit //
+	_alive[background_critical].clear(); _alive[background].clear();
+
+	cancel_all();
 
 	// wait until signalled for clean exit //
 	for (uint32_t current_thread = 0; current_thread < thread_count; ++current_thread) {
 		
 		while (_alive[current_thread].test_and_set()) {
 
-			SleepEx(1, TRUE); // lower cpu usage
-			_mm_pause();
+			_mm_pause(); // hint to processor
+			SleepEx(beats::min, TRUE); // lower cpu usage, yield to another thread
 		}
 	}
 

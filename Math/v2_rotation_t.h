@@ -29,8 +29,9 @@ public:
 	__forceinline float const cosine() const { return(c); }
 	__forceinline float const sine() const { return(s); }
 
+	__inline XMVECTOR const XM_CALLCONV data(void) const { return(XMLoadFloat3A(&vR)); } // for raw vector of values equal to cosine, sine, angle
 	__inline XMVECTOR const XM_CALLCONV v2(void) const { return(XMLoadFloat2A((XMFLOAT2A const* const __restrict)&vR)); } // only want to return cos, sin in v2 x, y excluding saved angle
-	__inline float const __vectorcall angle(void) const { return(Angle); } // range is -XM_PI to XM_PI //
+	__inline float const __vectorcall   angle(void) const { return(Angle); } // range is -XM_PI to XM_PI //
 private:
 	// keeping the range wrapped from -PI to PI is important to preserve the highest precision as input into sin / cos functions
 	// get an extra bit of precision!
@@ -72,7 +73,9 @@ private:
 		Angle = fAngle;					// to be added/subtracted from and existing angle without the recalculation of sin/cos
 	}									// however cannot be used succesfively over many loops / frames / etc. as error begins to accumulate fast
 										// kinda stupid if you as me, these are supposed to be identities!! but due to floating point rounding errors, the error accumulates
-	
+
+public:
+	// for raw data initialization usage only, prefer other constructors for normal usage
 	inline explicit v2_rotation_t(float const fCos, float const fSin, float const fAngle) // in radians
 		: c(fCos), s(fSin), Angle(fAngle)
 	{}

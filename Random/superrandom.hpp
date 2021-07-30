@@ -30,14 +30,15 @@ eg.) in rng.c file:                                       *(only one C file)
 #define RANDOM_KEY_SEED 0
 #endif
 
-void InitializeRandomNumberGenerators();
+void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting the main seed
+uint64_t const GetSecureSeed();
 
 // These Functions are for the Psuedo RNG - Deterministic by setting seed value with HashSetSeed
 
 float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/);
-int64_t const PsuedoRandomNumber64();
+int64_t const PsuedoRandomNumber64(int64_t const iMin = 0, int64_t const iMax = INT64_MAX); //* do note that with a min of 0 there will be no negative numbers
 int32_t const PsuedoRandomNumber32(int32_t const iMin = 0, int32_t const iMax = INT32_MAX); // inclusive of min & max
-int32_t const PsuedoRandomNumber16(int32_t const iMin = 0, int32_t const iMax = UINT16_MAX); // inclusive " ""  " ""
+int32_t const PsuedoRandomNumber16(int32_t const iMin = 0, int32_t const iMax = INT16_MAX); // inclusive " ""  " ""
 bool const PsuedoRandom5050(void);
 
 #define PsuedoRandomNumber PsuedoRandomNumber32	// default
@@ -64,7 +65,7 @@ void random_shuffle(RandomIt&& first, RandomIt&& last)
 		// *must pre-decrement*
 		// inclusive 0...n, where n < (last - first)
 		// as indices, or bounds could be exceeded.
-		auto const i(PsuedoRandomNumber32(0, --n));
+		auto const i(PsuedoRandomNumber64(0, --n)); // needs range so only really supports 32bit numbers.
 
 		std::swap(first[n], first[i]);
 	}
@@ -117,6 +118,7 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 #include <intrin.h>
 #pragma intrinsic(_rotl)
 #pragma intrinsic(_rotl64)
+#pragma intrinsic(_umul128)
 
 /* BEGIN IMPLEMENTATION */
 // begin private //
@@ -136,9 +138,12 @@ typedef struct alignas(32) sRandom
 
 	uint64_t	hashSeed;
 
-	bool Initialized = false;
+	static inline std::atomic_uint64_t									   count{ 0 };
+	static inline std::atomic_uint64_t									   latest_instance_index{ 0 };
+	static inline tbb::concurrent_unordered_map<ptrdiff_t const, sRandom*> instances;
 
-	static inline std::atomic_uint64_t instance{0};
+	bool Initialized = false;
+	uint64_t instance_index = count;
 } Random;
 
 // redefinition inline std::atomic_uint64_t sRandom::instance(0);
@@ -220,16 +225,41 @@ static __inline uint64_t const xorshift_next(void) {
 
 	oRandom.xorshift_state = _mm256_load_si256((__m256i*)state.data);
 
+	Random::latest_instance_index = oRandom.instance_index;
+
 	return(result_starstar - 1LL);	// bugfix: avoids a strangle failure case by using the - 1, still allowing zero to be returned to the caller (this is the only safe place for zero to be introduced!)
 }
 
 // internally used for distribution on range, 16bit numbers will be faster on ARM, but 32bit numbers on a x64 Intel will be faster
 // this avoids using the modulo operator (no division), ref: https://github.com/lemire/fastrange
+#ifndef uint128_t
+struct uint128_t {
+	uint64_t u64[2]; 
+};
+uint128_t _mul128(uint64_t const a_lo, uint64_t const b_lo)
+{
+	uint64_t lolo_high;
+	uint64_t const lolo = _umul128(a_lo, b_lo, &lolo_high);
+	return { {lolo, lolo_high} };
+}
+#endif
+STATIC_INLINE_PURE uint64_t const RandomNumber_Limit_64(uint64_t const xrandx, uint64_t const uiMax) { // 1 to UINT32_MAX
+	return((uint64_t)(_mul128(xrandx, uiMax).u64[1])); // same as shift down 64 bits, by just selecting the upper 64bits 
+}
+#ifdef uint128_t
+#undef uint128_t
+#undef mul128x64
+#endif
 STATIC_INLINE_PURE uint32_t const RandomNumber_Limit_32(uint32_t const xrandx, uint32_t const uiMax) { // 1 to UINT32_MAX
 	return((uint32_t)(((uint64_t)xrandx * (uint64_t)uiMax) >> 32));
 }
 STATIC_INLINE_PURE uint16_t const RandomNumber_Limit_16(uint16_t const xrandx, uint16_t const uiMax) { // 1 to 65535
 	return((uint16_t)(((uint32_t)xrandx * (uint32_t)uiMax) >> 16));
+}
+
+STATIC_INLINE_PURE int64_t const RandomNumber_Limits_64(uint64_t const xrandx, int64_t const iMin, int64_t const iMax)
+{
+	return(((int64_t)RandomNumber_Limit_64(xrandx, iMax - iMin)) + iMin);
 }
 STATIC_INLINE_PURE int32_t const RandomNumber_Limits_32(uint32_t const xrandx, int32_t const iMin, int32_t const iMax)
 {
@@ -254,9 +284,10 @@ float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/)
 
 }
 
-int64_t const PsuedoRandomNumber64()
+int64_t const PsuedoRandomNumber64(int64_t const iMin, int64_t const iMax)
 {
-	return(xorshift_next());
+	if (iMin == iMax) return(iMin);
+	return(RandomNumber_Limits_64(uint64_t(xorshift_next()), iMin, iMax));
 }
 int32_t const PsuedoRandomNumber32(int32_t const iMin, int32_t const iMax)
 {
@@ -270,7 +301,7 @@ int32_t const PsuedoRandomNumber16(int32_t const iMin, int32_t const iMax)
 }
 bool const PsuedoRandom5050(void)
 {
-	return(PsuedoRandomNumber64() < 0);
+	return(PsuedoRandomNumber64(INT64_MIN, INT64_MAX) < 0);
 }
 // deprecated functions PsuedoRandomNumber32, PsuedoRandomNumber8 left for compatability
 /*DECLSPEC_DEPRECATED
@@ -387,8 +418,12 @@ static __inline void SetXorShiftState(uint64_t const seed)
 // private for init only  //
 static void InitializeRandomNumberGeneratorInstance()
 {
-	oRandom = oRandomMaster;
-	SetXorShiftState(oRandom.hashSeed + ++oRandom.instance);
+	oRandom = oRandomMaster; // copy starting state (synchronize) //
+
+	Random::instances[((ptrdiff_t)&oRandom)] = &oRandom;
+
+	SetXorShiftState(oRandom.hashSeed);
+	++Random::count;
 }
 
 // private for init only  //
@@ -418,58 +453,71 @@ static void PsuedoResetSeed()
 }
 
 // Only call this function ONCE!!!
-void InitializeRandomNumberGenerators()
+void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 {
 #if (0 != RANDOM_KEY_SEED)
-	static constexpr uint32_t DUMP_ITERATIONS = 5;			// go thru both sides of buffer and fill values n/2 - 1 times
-															// Seed 16 numbers to randomize startup a little
+	if (0 == deterministic_seed) {
+		static constexpr uint32_t DUMP_ITERATIONS = 5;			// go thru both sides of buffer and fill values n/2 - 1 times
+																// Seed 16 numbers to randomize startup a little
 
-	// get true random number from hardware if available
-	bool use_seed(false), use_rand(false);
-	uint64_t seed(0);
+		// get true random number from hardware if available
+		bool use_seed(false), use_rand(false);
+		uint64_t seed(0);
 
-	use_seed = InstructionSet::RDSEED();	// broadwell+
+		use_seed = InstructionSet::RDSEED();	// broadwell+
 
-	if (!use_seed){ //ivy bridge+, amd ryzen
-		use_rand = InstructionSet::RDRAND();
-	}
+		if (!use_seed) { //ivy bridge+, amd ryzen
+			use_rand = InstructionSet::RDRAND();
+		}
 
-	if ((use_seed | use_rand)) {
-		uint32_t attempts(8);
+		if ((use_seed | use_rand)) {
+			uint32_t attempts(8);
 
-		int success(0);
-		do
-		{
-			if (use_seed) { // function pointers aren't allowed on intrinsic functions - intrinsic functions map directly to instruction
-				success = _rdseed64_step(&seed);
-			}
-			else {
-				success = _rdrand64_step(&seed);
-			}
+			int success(0);
+			do
+			{
+				if (use_seed) { // function pointers aren't allowed on intrinsic functions - intrinsic functions map directly to instruction
+					success = _rdseed64_step(&seed);
+				}
+				else {
+					success = _rdrand64_step(&seed);
+				}
+
+				_mm_pause();
+			} while (!success && --attempts);
+		}
+
+		// add processor tick count so if above is not supported, and too add more randomness to seed
+		uint32_t uiDump(DUMP_ITERATIONS);
+		while (0 != uiDump) {
+
+			LARGE_INTEGER llCount;
+			QueryPerformanceCounter(&llCount);
+
+			//using overflow on purpose
+			seed += seed + llCount.QuadPart;			// dumping into reservedSeed, initting reserveSeed with a random number
 
 			_mm_pause();
-		} while (!success && --attempts);
+			--uiDump;
+		}
+		oRandom.reservedSeed = seed;
+		
 	}
-
-	// add processor tick count so if above is not supported, and too add more randomness to seed
-	uint32_t uiDump(DUMP_ITERATIONS);
-	while (0 != uiDump) {
-
-		LARGE_INTEGER llCount;
-		QueryPerformanceCounter(&llCount);
-
-		//using overflow on purpose
-		seed += seed + llCount.QuadPart;			// dumping into reservedSeed, initting reserveSeed with a random number
-
-		_mm_pause();
-		--uiDump;
+	else {
+		oRandom.reservedSeed = deterministic_seed; // for initializing / reinitializing internal secure seed
 	}
-	oRandom.reservedSeed = seed; 
+#else
+	if (0 == deterministic_seed) {
+		oRandom.reservedSeed = DETERMINISTIC_KEY_SEED;
+	}
+	else {
+		oRandom.reservedSeed = deterministic_seed; // for initializing / reinitializing internal secure seed
+	}
+#endif
+
+	// [placed here for security of hash alway being not equal to zero]
 	if (0ULL == oRandom.reservedSeed)// seeds must be nonzero (so important don't remove)
 		++oRandom.reservedSeed;
-#else
-	oRandom.reservedSeed = DETERMINISTIC_KEY_SEED;
-#endif
 
 	// init step 0
 	oRandom.Initialized = true; // set first so we prevent recursive initialization!
@@ -487,6 +535,21 @@ void InitializeRandomNumberGenerators()
 	// who ever manually calls InitializeRandomNumberGenerators on program init is the master random instance (1st thread local instance)
 	// all other new thread local instances then init based off of the initial program state, saved in oRandomMaster
 	oRandomMaster = oRandom;
+
+	// for re-initialization with potentially new deterministic seed, if not has no effect but synchronizing state for other threads (thread-local access) with the master state.
+	// This in effect calls to for each thread_local instance - InitializeRandomNumberGeneratorInstance() - on first usage (including primary thread).
+	for (auto instance = Random::instances.cbegin(); instance != Random::instances.cend(); ++instance) {
+		instance->second->Initialized = false;
+	}
+}
+
+uint64_t const GetSecureSeed()
+{
+	[[unlikely]] if (!oRandom.Initialized) {
+		return(0); // if random library is initialized return 0 indicating failure (0 is always an invalid number for a hash)
+	}
+
+	return(oRandom.reservedSeed);
 }
 
 #endif //RANDOM_IMPLEMENTATION
