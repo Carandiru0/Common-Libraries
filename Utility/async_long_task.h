@@ -55,12 +55,12 @@ namespace internal_only
 	};
 
 	template <typename lambda>
-	class async_work_lambda : public async_work
+	class async_work_lambda final : public async_work
 	{
 		lambda const _work;
 
 	public:
-		virtual void execute() const final
+		virtual void execute() const override final
 		{
 			_work();
 		}

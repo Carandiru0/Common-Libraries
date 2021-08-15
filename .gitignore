@@ -39,3 +39,5 @@ cmake_uninstall.cmake
 Rubbish
 vulkancapsviewer
 desktop.ini
+*.obsolete
+*.old

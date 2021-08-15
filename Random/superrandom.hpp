@@ -236,7 +236,7 @@ static __inline uint64_t const xorshift_next(void) {
 struct uint128_t {
 	uint64_t u64[2]; 
 };
-uint128_t _mul128(uint64_t const a_lo, uint64_t const b_lo)
+uint128_t const _mul128(uint64_t const a_lo, uint64_t const b_lo)
 {
 	uint64_t lolo_high;
 	uint64_t const lolo = _umul128(a_lo, b_lo, &lolo_high);
@@ -248,7 +248,7 @@ STATIC_INLINE_PURE uint64_t const RandomNumber_Limit_64(uint64_t const xrandx, u
 }
 #ifdef uint128_t
 #undef uint128_t
-#undef mul128x64
+#undef _mul128
 #endif
 STATIC_INLINE_PURE uint32_t const RandomNumber_Limit_32(uint32_t const xrandx, uint32_t const uiMax) { // 1 to UINT32_MAX
 	return((uint32_t)(((uint64_t)xrandx * (uint64_t)uiMax) >> 32));
@@ -301,7 +301,7 @@ int32_t const PsuedoRandomNumber16(int32_t const iMin, int32_t const iMax)
 }
 bool const PsuedoRandom5050(void)
 {
-	return(PsuedoRandomNumber64(INT64_MIN, INT64_MAX) < 0);
+	return(PsuedoRandomNumber32(INT32_MIN, INT32_MAX) < 0);
 }
 // deprecated functions PsuedoRandomNumber32, PsuedoRandomNumber8 left for compatability
 /*DECLSPEC_DEPRECATED

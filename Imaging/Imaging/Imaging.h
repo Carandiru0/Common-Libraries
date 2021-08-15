@@ -158,6 +158,10 @@ typedef struct ImagingLUT	// 16bit/channel 3D LUT
 
 } ImagingLUT;
 
+// color operations //
+uint32_t const ImagingSRGBtoLinear(uint32_t const srgb);
+
+
 // OPERATIONS //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingNew( eIMAGINGMODE const mode, int const xsize, int const ysize);
 ImagingLUT* const __restrict __vectorcall ImagingNew(int const size);
@@ -183,6 +187,7 @@ void __vectorcall ImagingLUTLerp(ImagingLUT* const __restrict lut_dst, ImagingLU
 void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src);
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
 
+void __vectorcall ImagingSRGBtoLinear(ImagingMemoryInstance* const __restrict im); // @todo
 
 // BGRX in - BGR out
 void __vectorcall Parallel_BGRX2BGR(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,

@@ -12,7 +12,7 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 #include <atomic>
 #include <cstddef>
-#include <Utility/optimized.h>
+
 #include <tbb/scalable_allocator.h>
 //#include <Utility/asmlib.h>
 
@@ -107,9 +107,6 @@ public:
 		_minX = UINT32_MAX;
 		_maxZ = 0;
 		_maxX = 0;
-
-		__memclr_aligned_32<capacity()>(_block);		// if big enough streaming will be turned on (evaluated at compile time)
-		__memclr_aligned_32<capacity()>(_occupy);
 	}
 
 public:

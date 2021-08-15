@@ -149,6 +149,10 @@ public:
 	__forceinline explicit __vectorcall vec4_v(T const replicated_to_all_components = T(0))
 		: v(_mm_set1_epi32(replicated_to_all_components))
 	{}
+
+	__forceinline operator __m128i const() const {
+		return(v);
+	}
 };
 using ivec4_v = vec4_v<int32_t>;		// vector type like a XMVECTOR
 using uvec4_v = vec4_v<uint32_t>;
