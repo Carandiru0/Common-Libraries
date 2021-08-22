@@ -15,10 +15,10 @@ eg.) in rng.c file:                                       *(only one C file)
 
 // ** advanced usage:
 // 
-// HashSetSeed( "some constant key number representing an object or thing" );
+// SetSeed( "some constant key number representing an object or thing" );
 // uint64_t const hash_key = Hash( "some changing value, eg.) x coordinate" ) ^ Hash( "some changing value, eg.) y coordinate" );
 // -or-
-// HashSetSeed then PsuedoRandom...() , generate your deterministic random numbers
+// SetSeed then PsuedoRandom...() , generate your deterministic random numbers
 // ...
 //
 // note: You do *not* have to reset seed!
@@ -30,11 +30,13 @@ eg.) in rng.c file:                                       *(only one C file)
 #define RANDOM_KEY_SEED 0
 #endif
 
-void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting the main seed
+void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
 uint64_t const GetSecureSeed();
+void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Hash & Psuedo RNG functions *only*
 
-// These Functions are for the Psuedo RNG - Deterministic by setting seed value with HashSetSeed
 
+
+// These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
 float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/);
 int64_t const PsuedoRandomNumber64(int64_t const iMin = 0, int64_t const iMax = INT64_MAX); //* do note that with a min of 0 there will be no negative numbers
 int32_t const PsuedoRandomNumber32(int32_t const iMin = 0, int32_t const iMax = INT32_MAX); // inclusive of min & max
@@ -43,12 +45,10 @@ bool const PsuedoRandom5050(void);
 
 #define PsuedoRandomNumber PsuedoRandomNumber32	// default
 
+
+// These are hashing 64bit & 32bit values directly, deterministic by using SetSeed()
 uint64_t const Hash(int64_t const data);
 uint32_t const Hash(int32_t const data);
-
-
-void HashSetSeed(int64_t const Seed);
-void HashSetSeed(int32_t const Seed);
 
 // for randomdly shuffling a std::vector or similar
 template<typename RandomIt>
@@ -107,6 +107,15 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 	return(samples);
 }
 
+[[deprecated]] static __inline void HashSetSeed(int64_t Seed) // for backwards compatibility
+{
+	SetSeed(Seed);
+}
+[[deprecated]] static __inline void HashSetSeed(int32_t Seed) // for backwards compatibility
+{
+	SetSeed((int64_t)Seed);
+}
+
 /// ############# IMPL #################### //
 #ifdef RANDOM_IMPLEMENTATION
 
@@ -122,29 +131,26 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 
 /* BEGIN IMPLEMENTATION */
 // begin private //
-static constexpr uint64_t const XORSHIFT_STATE_RESET[4] = { 0x00000000000000D1,0x00000000000000D3,0x00000000000000D7,0x00000000000000DA };
+static constexpr uint64_t const XORSHIFT_STATE_RESET[4] = { 0x00000000000000D1,0x00000000000000D3,0x00000000000000D7,0x00000000000000DA }; // does not matter what these values are, after init() the actuall used values are set properly
 
-typedef struct alignas(32) sRandom
+typedef struct alignas(32) sRandom /* this structure is constinit optimized, don't touch */
 {
-	__m256i xorshift_state{ _mm256_set_epi64x(XORSHIFT_STATE_RESET[0],XORSHIFT_STATE_RESET[1],XORSHIFT_STATE_RESET[2],XORSHIFT_STATE_RESET[3]) };  // psuedo rng seeds must be non zero
-																						   // *** very important - seeds must be non zero, high bits are better than low bits
-																						   // * Hash * used on the state
-																						   //  This is what decorrelates the different parts of the state
-																						   // see: https://www.shadertoy.com/view/MdVBWK
-	__m256i reserved_xorshift_state{};	// hashSeed is changeable, do not change reserved_xorshift_state after initial INIT!!
+	__m256i xorshift_state;
 
+	__m256i reserved_xorshift_state;	
 
-	uint64_t    reservedSeed;			// hashSeed is changeable, do not change reservedSeed after initial INIT!!
+	uint64_t reservedSeed;			
 
-	uint64_t	hashSeed;
+	uint64_t hashSeed;
+	
+	bool Initialized;
 
-	static inline std::atomic_uint64_t									   count{ 0 };
-	static inline std::atomic_uint64_t									   latest_instance_index{ 0 };
-	static inline tbb::concurrent_unordered_map<ptrdiff_t const, sRandom*> instances;
-
-	bool Initialized = false;
-	uint64_t instance_index = count;
 } Random;
+
+namespace internal
+{
+	static inline tbb::concurrent_unordered_map<ptrdiff_t const, sRandom*> instances;
+}
 
 // redefinition inline std::atomic_uint64_t sRandom::instance(0);
 
@@ -157,9 +163,10 @@ typedef struct alignas(32) sRandom
    are aware of.
 
    The state must be seeded so that it is not everywhere zero. */
-static inline Random oRandomMaster;
+constinit static inline Random oRandomMaster{};
 
-thread_local static Random oRandom; // thread local randoms that mirror the oRandomMaster configuration
+constinit thread_local static Random oRandom{}; // thread local randoms that mirror the oRandomMaster configuration
+
 static void InitializeRandomNumberGeneratorInstance(); // forward declaration
 
 // ** xxHash ** Function https://blogs.unity3d.com/2015/01/07/a-primer-on-repeatable-random-numbers/
@@ -224,8 +231,6 @@ static __inline uint64_t const xorshift_next(void) {
 	state.w = _rotl64(state.w, 45);
 
 	oRandom.xorshift_state = _mm256_load_si256((__m256i*)state.data);
-
-	Random::latest_instance_index = oRandom.instance_index;
 
 	return(result_starstar - 1LL);	// bugfix: avoids a strangle failure case by using the - 1, still allowing zero to be returned to the caller (this is the only safe place for zero to be introduced!)
 }
@@ -327,24 +332,6 @@ h32 *= PRIME32_3;
 h32 ^= h32 >> 16;
 return h32;
 }*/
-
-// private for internal usage only (forward decl) //
-static void PsuedoSetSeed(int64_t Seed);
-
-void HashSetSeed(int64_t Seed)
-{
-	[[unlikely]] if (!oRandom.Initialized) {
-		InitializeRandomNumberGeneratorInstance();
-	}
-
-	// seeds must be nonzero (so important don't remove)
-	if (0LL == Seed)
-		++Seed;
-
-	oRandom.hashSeed = (uint64_t)Seed;
-	PsuedoSetSeed(Seed);
-}
-
 uint64_t const Hash(int64_t const data)
 {
 	[[unlikely]] if (!oRandom.Initialized) {
@@ -368,21 +355,6 @@ uint64_t const Hash(int64_t const data)
 
 	return(h64);
 }
-
-void HashSetSeed(int32_t Seed)
-{
-	[[unlikely]] if (!oRandom.Initialized) {
-		InitializeRandomNumberGeneratorInstance();
-	}
-
-	// seeds must be nonzero (so important don't remove)
-	if (0LL == Seed)
-		++Seed;
-
-	oRandom.hashSeed = (uint64_t)Seed;
-	PsuedoSetSeed(Seed);
-}
-
 uint32_t const Hash(int32_t const data)
 {
 	[[unlikely]] if (!oRandom.Initialized) {
@@ -408,6 +380,7 @@ uint32_t const Hash(int32_t const data)
 }
 
 // private for init only  //
+// private for init only  //
 static __inline void SetXorShiftState(uint64_t const seed)
 {
 	__m256i const pendingState(_mm256_add_epi64(_mm256_set1_epi64x(seed),
@@ -415,19 +388,7 @@ static __inline void SetXorShiftState(uint64_t const seed)
 	oRandom.xorshift_state = HashState(pendingState); // high quality hash of state before handoff to xorshift state
 }
 
-// private for init only  //
-static void InitializeRandomNumberGeneratorInstance()
-{
-	oRandom = oRandomMaster; // copy starting state (synchronize) //
-
-	Random::instances[((ptrdiff_t)&oRandom)] = &oRandom;
-
-	SetXorShiftState(oRandom.hashSeed);
-	++Random::count;
-}
-
-// private for init only  //
-static void PsuedoSetSeed(int64_t Seed)
+void SetSeed(int64_t Seed)
 {
 	[[unlikely]] if (!oRandom.Initialized) {
 		InitializeRandomNumberGeneratorInstance();
@@ -446,15 +407,37 @@ static void PsuedoSetSeed(int64_t Seed)
 
 	oRandom.hashSeed = save_hash_seed; // restore saved hash seed value
 }
+
+// private for init only  //
+// private for init only  //
+static void InitializeRandomNumberGeneratorInstance()
+{
+	// step 0 - *important copy from the master initialized instance*  [thread local] = [master]
+	oRandom = oRandomMaster; // copy starting state (synchronize) //
+
+	// step 1
+	internal::instances[((ptrdiff_t)&oRandom)] = &oRandom;
+
+	// step 2
+	SetXorShiftState(oRandom.hashSeed);
+}
+
+// private for init only  //
 // private for init only  //
 static void PsuedoResetSeed()
 {
 	oRandom.xorshift_state = oRandom.reserved_xorshift_state;
 }
 
-// Only call this function ONCE!!!
+// Only call this function ONCE!!! -or- Only call this function to load a NEW SEED.
 void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 {
+	// init step 0a
+	oRandom.xorshift_state = { _mm256_set_epi64x(XORSHIFT_STATE_RESET[0], XORSHIFT_STATE_RESET[1], XORSHIFT_STATE_RESET[2], XORSHIFT_STATE_RESET[3]) };  // psuedo rng seeds must be non zero
+																																						   // *** very important - seeds must be non zero, high bits are better than low bits
+																																						   // * Hash * used on the state
+																																						   //  This is what decorrelates the different parts of the state
+																																						   // see: https://www.shadertoy.com/view/MdVBWK
 #if (0 != RANDOM_KEY_SEED)
 	if (0 == deterministic_seed) {
 		static constexpr uint32_t DUMP_ITERATIONS = 5;			// go thru both sides of buffer and fill values n/2 - 1 times
@@ -519,13 +502,13 @@ void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 	if (0ULL == oRandom.reservedSeed)// seeds must be nonzero (so important don't remove)
 		++oRandom.reservedSeed;
 
-	// init step 0
+	// init step 0b
 	oRandom.Initialized = true; // set first so we prevent recursive initialization!
 	// init step 1
-	PsuedoSetSeed(oRandom.reservedSeed);
+	SetSeed(oRandom.reservedSeed);
 	oRandom.reserved_xorshift_state = oRandom.xorshift_state;  // only place should reserved_xorshift_state ever be "set"
 	// init step 2
-	oRandom.hashSeed = oRandom.reservedSeed;
+	oRandom.hashSeed = oRandom.reservedSeed; // after the next step the xorshift state will be synchronized.
 	// init final step 3
 	PsuedoResetSeed(); // hashSeed is set here for init, while during runtime it does reset both hashSeed to the beginning,
 					   // and reserved_xorshift_state is resumed from where it was
@@ -538,20 +521,25 @@ void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 
 	// for re-initialization with potentially new deterministic seed, if not has no effect but synchronizing state for other threads (thread-local access) with the master state.
 	// This in effect calls to for each thread_local instance - InitializeRandomNumberGeneratorInstance() - on first usage (including primary thread).
-	for (auto instance = Random::instances.cbegin(); instance != Random::instances.cend(); ++instance) {
+	for (auto instance = internal::instances.cbegin(); instance != internal::instances.cend(); ++instance) {
 		instance->second->Initialized = false;
 	}
 }
 
 uint64_t const GetSecureSeed()
 {
-	[[unlikely]] if (!oRandom.Initialized) {
-		return(0); // if random library is initialized return 0 indicating failure (0 is always an invalid number for a hash)
+	[[unlikely]] if (!oRandomMaster.Initialized) {
+		return( 0 ); // if random library is not initialized return 0 indicating failure (0 is always an invalid number for a SEED)
 	}
 
-	return(oRandom.reservedSeed);
-}
-
+	// If there equal, only one value is returned.
+	// if there unequal, many different values can be returned. (invalid secure seed)
+	return( oRandomMaster.reservedSeed & oRandomMaster.hashSeed ); // secure: redundant hash seeds. If they are not equal then this will return an invalid hash number.
+}																   // in normal usage neither of these variables should not equal each other. reservedSeed never changes after init(), 
+																   // hashSeed only changes temporally but is restored upon completion of a call to SetSeed(). so the "outside world" should always
+																   // see the two seeds as equal.
+																   // if the memory address for either of these seeds is tampered with, one will not equal the other.
+																   // The secure seed will be invalid if used for saving/loading. A different seed will result in unpredictable behaviour.
 #endif //RANDOM_IMPLEMENTATION
 
 

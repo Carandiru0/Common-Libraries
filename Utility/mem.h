@@ -134,7 +134,7 @@ INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, siz
 namespace internal_mem
 {
 	static constexpr size_t const _cache_size = MINIMUM_PAGE_SIZE;
-	inline thread_local alignas(CACHE_LINE_BYTES) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
+	extern __declspec(selectany) inline thread_local constinit alignas(CACHE_LINE_BYTES) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
 
 	// *internal only to be used with _streaming_cache as dest.
 	template<size_t const alignment>
