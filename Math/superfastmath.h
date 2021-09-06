@@ -223,6 +223,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 		return(_mm_abs_epi32(a));
 	}
+	STATIC_INLINE_PURE int64_t const __vectorcall abs(int64_t const a) {
+
+		return(_mm_cvtsi128_si64(_mm_abs_epi64(_mm_set1_epi64x(a))));
+	}
 	STATIC_INLINE_PURE int32_t const __vectorcall abs(int32_t const a) {
 
 		return(_mm_cvtsi128_si32(_mm_abs_epi32(_mm_set1_epi32(a))));
@@ -239,6 +243,14 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	STATIC_INLINE_PURE __m128i const __vectorcall min(__m128i const a, __m128i const b) {
 
 		return(_mm_min_epi32(a, b));
+	}
+	STATIC_INLINE_PURE int64_t const __vectorcall min(int64_t const a, int64_t const b) {
+
+		return(_mm_cvtsi128_si64(_mm_min_epi64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
+	}
+	STATIC_INLINE_PURE uint64_t const __vectorcall min(uint64_t const a, uint64_t const b) {
+
+		return((uint32_t)_mm_cvtsi128_si64(_mm_min_epu64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
 	}
 	STATIC_INLINE_PURE int32_t const __vectorcall min(int32_t const a, int32_t const b) {
 
@@ -259,6 +271,14 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	STATIC_INLINE_PURE __m128i const __vectorcall max(__m128i const a, __m128i const b) {
 
 		return(_mm_max_epi32(a, b));
+	}
+	STATIC_INLINE_PURE int64_t const __vectorcall max(int64_t const a, int64_t const b) {
+
+		return(_mm_cvtsi128_si64(_mm_max_epi64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
+	}
+	STATIC_INLINE_PURE uint64_t const __vectorcall max(uint64_t const a, uint64_t const b) {
+
+		return((uint32_t)_mm_cvtsi128_si64(_mm_max_epu64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
 	}
 	STATIC_INLINE_PURE int32_t const __vectorcall max(int32_t const a, int32_t const b) {
 
@@ -964,7 +984,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 	// special fast round up for multiples known - only works with ***even multiple numbers*** 
 	template<bool const bRoundUp>
-	int64_t const roundToMultipleOf(int64_t const n, int64_t const multiple)  // signed integers only 
+	STATIC_INLINE_PURE int64_t const roundToMultipleOf(int64_t const n, int64_t const multiple)  // signed integers only 
 	{
 		if constexpr(bRoundUp) {
 			return((n + (multiple - 1)) & (-multiple));		// add seven then round down to the closest multiple of 8
@@ -974,7 +994,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		}
 	}
 	template<bool const bRoundUp>
-	int32_t const roundToMultipleOf(int32_t const n, int32_t const multiple)  // signed integers only 
+	STATIC_INLINE_PURE int32_t const roundToMultipleOf(int32_t const n, int32_t const multiple)  // signed integers only 
 	{
 		if constexpr (bRoundUp) {
 			return((n + (multiple - 1)) & (-multiple));		// add seven then round down to the closest multiple of 8
@@ -1007,7 +1027,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	// clamping and saturation with type conversion:
 	//
 
-	STATIC_INLINE_PURE __m256 const __vectorcall clamp(__m256 a, __m256 min_, __m256 max_)
+	STATIC_INLINE_PURE __m256 const __vectorcall clamp(__m256 const a, __m256 const min_, __m256 const max_)
 	{
 		return(_mm256_min_ps(_mm256_max_ps(a, min_), max_));
 	}

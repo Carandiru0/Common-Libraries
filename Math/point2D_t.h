@@ -116,6 +116,13 @@ STATIC_INLINE_PURE point2D_t const __vectorcall p2D_mul(point2D_t const a, point
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_muls(point2D_t const a, int32_t const s) {
 	return(point2D_t(_mm_mullo_epi32(a.v, point2D_t(s).v)));  // bugfix: dont use _mm_mul_epi32, it operates outside bounds of usable(2 int32's) union, 64bit operation really....
 }
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_div(point2D_t const a, point2D_t const b) {
+	return(point2D_t(_mm_div_epi32(a.v, b.v)));  
+}
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_divs(point2D_t const a, int32_t const s) {
+	return(point2D_t(_mm_div_epi32(a.v, point2D_t(s).v)));  
+}
+
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_negate(point2D_t const a) {
 	return(point2D_t(_mm_sub_epi32(point2D_t{}.v, a.v)));
 }
