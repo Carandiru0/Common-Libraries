@@ -524,7 +524,7 @@ ImagingError_Clear(void)
 }
 
 
-inline const __declspec(selectany) uint8_t const srgb_to_linear_lut[256] = { // single channel
+constexpr static inline uint8_t const srgb_to_linear_lut[256] = { // single channel
 	0,
 	0,
 	0,
