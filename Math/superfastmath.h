@@ -223,10 +223,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 		return(_mm_abs_epi32(a));
 	}
-	STATIC_INLINE_PURE int64_t const __vectorcall abs(int64_t const a) {
-
-		return(_mm_cvtsi128_si64(_mm_abs_epi64(_mm_set1_epi64x(a))));
-	}
+	/* 64 bit version of abs (int64_t/uint64_t) does not exist here due to requirement of avx-512 intrinsics - Use std::abs instead if 64bit numbers are required */
 	STATIC_INLINE_PURE int32_t const __vectorcall abs(int32_t const a) {
 
 		return(_mm_cvtsi128_si32(_mm_abs_epi32(_mm_set1_epi32(a))));
@@ -244,14 +241,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 		return(_mm_min_epi32(a, b));
 	}
-	STATIC_INLINE_PURE int64_t const __vectorcall min(int64_t const a, int64_t const b) {
-
-		return(_mm_cvtsi128_si64(_mm_min_epi64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
-	}
-	STATIC_INLINE_PURE uint64_t const __vectorcall min(uint64_t const a, uint64_t const b) {
-
-		return((uint32_t)_mm_cvtsi128_si64(_mm_min_epu64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
-	}
+	/* 64 bit version of min (int64_t/uint64_t) does not exist here due to requirement of avx-512 intrinsics - Use std::min instead if 64bit numbers are required */
 	STATIC_INLINE_PURE int32_t const __vectorcall min(int32_t const a, int32_t const b) {
 
 		return(_mm_cvtsi128_si32(_mm_min_epi32(_mm_set1_epi32(a), _mm_set1_epi32(b))));
@@ -272,14 +262,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 		return(_mm_max_epi32(a, b));
 	}
-	STATIC_INLINE_PURE int64_t const __vectorcall max(int64_t const a, int64_t const b) {
-
-		return(_mm_cvtsi128_si64(_mm_max_epi64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
-	}
-	STATIC_INLINE_PURE uint64_t const __vectorcall max(uint64_t const a, uint64_t const b) {
-
-		return((uint32_t)_mm_cvtsi128_si64(_mm_max_epu64(_mm_set1_epi64x(a), _mm_set1_epi64x(b))));
-	}
+	/* 64 bit version of max (int64_t/uint64_t) does not exist here due to requirement of avx-512 intrinsics - Use std::max instead if 64bit numbers are required */
 	STATIC_INLINE_PURE int32_t const __vectorcall max(int32_t const a, int32_t const b) {
 
 		return(_mm_cvtsi128_si32(_mm_max_epi32(_mm_set1_epi32(a), _mm_set1_epi32(b))));
