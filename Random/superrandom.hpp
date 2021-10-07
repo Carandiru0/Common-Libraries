@@ -241,7 +241,7 @@ static __inline uint64_t const xorshift_next(void) {
 struct uint128_t {
 	uint64_t u64[2]; 
 };
-uint128_t const _mul128(uint64_t const a_lo, uint64_t const b_lo)
+STATIC_INLINE_PURE uint128_t const _mul128(uint64_t const a_lo, uint64_t const b_lo)
 {
 	uint64_t lolo_high;
 	uint64_t const lolo = _umul128(a_lo, b_lo, &lolo_high);

@@ -275,7 +275,7 @@ public:
 #endif
 		return(false); // task is finished
 	}
-	static bool const initialize(); // must be called once when appropriate at program start-up
+	static bool const initialize(unsigned long const (&cores)[2]); // must be called once when appropriate at program start-up
 	static void cancel_all();
 	static bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX) );  // optional timeout parameter - default is infinite, 0 would simply return if a wait is needed, all other alues are milliseconds
 private:
@@ -459,7 +459,7 @@ void async_long_task::record_task_id(task_id_t const task)
 	index[thread] = (index[thread] + 1) & (HISTORY_SZ - 1);
 }
 
-bool const async_long_task::initialize()
+bool const async_long_task::initialize(unsigned long const (&cores)[2])
 {
 	// initialized state must be done before creation of thread
 	_alive[background_critical].test_and_set(); // set to alive state so thread doesn't immediately exit
@@ -469,9 +469,14 @@ bool const async_long_task::initialize()
 	_hThread[background] = (void* const)_beginthread(&async_long_task::background_thread<background>, 0, nullptr);
 
 	if (_hThread[background_critical] && _hThread[background]) {
-		// attempt setting threads to non-potentially hyper-threaded (neutral) cores (even numbers), and away not main core (zero and potentially one)
-		SetThreadIdealProcessor(_hThread[background_critical], 2);
-		SetThreadIdealProcessor(_hThread[background], 4);
+
+		if (0 != cores[0]) {
+			SetThreadSelectedCpuSets(_hThread[background_critical], &cores[0], 1);
+		}
+		if (0 != cores[1]) {
+			SetThreadSelectedCpuSets(_hThread[background], &cores[1], 1);
+		}
+
 		return(true);
 	}
 

@@ -477,28 +477,26 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 
 	// Extended sign: returns -1, 0 or 1 based on sign of a
-	STATIC_INLINE_PURE XMVECTOR const __vectorcall sgn(FXMVECTOR const a)
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall sgn(FXMVECTOR const a) // branchless!
 	{
 		XMVECTOR const xmP(XMVectorSelect(_mm_setzero_ps(), _mm_set1_ps(1.0f), XMVectorGreater(a, _mm_setzero_ps())));
 		XMVECTOR const xmN(XMVectorSelect(_mm_setzero_ps(), _mm_set1_ps(-1.0f), XMVectorLess(a, _mm_setzero_ps())));
 
 		return(XMVectorAdd(xmP, xmN));
 	}
-	STATIC_INLINE_PURE float const __vectorcall sgn(float const a)
+	STATIC_INLINE_PURE float const __vectorcall sgn(float const a) // branchless!
 	{
-		if (a > 0.0f)
-			return(1.0f);
-		else if (a < 0.0f)
-			return(-1.0f);
-		return(0.0f);
+		// -1, 0, or +1
+		// Comparisons are not branching
+		// https://www.finblackett.com/bithacks
+		return( (a > 0.0f) - (a < 0.0f) );
 	}
-	STATIC_INLINE_PURE int32_t const __vectorcall sgn(int32_t const a)
+	STATIC_INLINE_PURE int32_t const __vectorcall sgn(int32_t const a) // branchless!
 	{
-		if (a > 0)
-			return(1);
-		else if (a < 0)
-			return(-1);
-		return(0);
+		// -1, 0, or +1
+		// Comparisons are not branching
+		// https://www.finblackett.com/bithacks
+		return( (a > 0) - (a < 0) );
 	}
 
 	// interpolation & easing:

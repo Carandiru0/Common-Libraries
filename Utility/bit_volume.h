@@ -9,6 +9,8 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
  */
 #pragma once
 #include <tbb\cache_aligned_allocator.h>
+#include <Utility/mem.h>
+
 #ifdef BIT_VOLUME_ATOMIC
 #include <atomic>
 using bits = std::atomic_size_t;
@@ -52,7 +54,11 @@ public:
 	__declspec(safebuffers) static inline bit_volume<Width, Height, Depth>* const __restrict create()
 	{
 		tbb::cache_aligned_allocator< bit_volume<Width, Height, Depth> > allocator;
-		return(static_cast<bit_volume<Width, Height, Depth>*const __restrict>(allocator.allocate(1)));
+		bit_volume<Width, Height, Depth>* const __restrict pReturn(static_cast<bit_volume<Width, Height, Depth>*const __restrict>(allocator.allocate(1)));
+
+		__memclr_stream<64>(pReturn, sizeof(bit_volume<Width, Height, Depth>));
+
+		return(pReturn);
 	}
 	__declspec(safebuffers) static inline void destroy(bit_volume<Width, Height, Depth>* volume)
 	{

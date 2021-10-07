@@ -104,7 +104,13 @@ public:
 	static __inline __declspec(noalias) bool const __vectorcall any(__m128i const test) {
 		constexpr uint32_t const mask(num_components_to_mask<num_components>());
 
-		return((_mm_movemask_ps(_mm_castsi128_ps(test)) & mask) != 0);
+		return((_mm_movemask_ps(_mm_castsi128_ps(test)) & mask) != 0); 
+	}
+	template<uint32_t const num_components>
+	static __inline __declspec(noalias) uint32_t const __vectorcall result(__m128i const test) {
+		constexpr uint32_t const mask(num_components_to_mask<num_components>());
+
+		return((_mm_movemask_ps(_mm_castsi128_ps(test)) & mask)); // then test the return value bits.  x = (1 << 0) , y = (1 << 1) , z = (1 << 2) , w = (1 << 3)
 	}
 
 	// comparison operators // use with static functions [any, all] for boolean result. These return a __m128i containing the "vector" result of the comparison.
