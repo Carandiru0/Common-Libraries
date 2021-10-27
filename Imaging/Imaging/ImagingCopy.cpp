@@ -18,6 +18,8 @@
 #endif
 #include <Compressonator.h>
 #include <tbb/scalable_allocator.h>
+#include <Utility/mio/mmap.hpp>
+#include <Utility/mem.h>
 
 /* --------------------------------------------------------------------
 * Standard image object.
@@ -1918,4 +1920,225 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingCompressBGRAToBC7(Im
 	}
 
 	return(imgReturn);
+}
+
+namespace
+{
+	/// Scale a value by mip level, but do not reduce to zero.
+	inline uint32_t mipScale(uint32_t value, uint32_t mipLevel) {
+		return std::max(value >> mipLevel, (uint32_t)1);
+	}
+	/// KTX files use OpenGL format values. This converts some common ones to Vulkan equivalents.
+	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
+	inline eIMAGINGMODE const GLtoImagingMode(uint32_t const glFormat) {
+		switch (glFormat) {
+		case 0x8229: return MODE_L;
+		case 0x1903: return MODE_L;
+
+		case 0x822B: return MODE_LA;
+		case 0x8227: return MODE_LA;
+
+		case 0x1907: return MODE_RGB; // GL_RGB
+
+		case 0x8058: return MODE_BGRX; // GL_RGBA
+		case 0x1908: return MODE_BGRX; // GL_RGBA
+
+		case 0x83F0: return MODE_ERROR; // GL_COMPRESSED_RGB_S3TC_DXT1_EXT
+		case 0x83F1: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
+		case 0x83F2: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
+		case 0x83F3: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+		case 0x8E8C: return MODE_ERROR;	// GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
+		case 0x8E8D: return MODE_ERROR;
+		}
+		return MODE_ERROR;
+	}
+	/// Layout of a KTX file in a buffer.
+	template<bool const WorkaroundLayerSizeDoubledInFileBug = false>
+	class KTXFileLayout {
+	public:
+		KTXFileLayout() {
+		}
+
+		KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end) {
+			uint8_t const* p = begin;
+			if (p + sizeof(Header) > end) return;
+			header = *(Header*)p;
+			static constexpr uint8_t magic[] = {
+			  0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A
+			};
+
+			if (memcmp(magic, header.identifier, sizeof(magic))) {
+				return;
+			}
+
+			if (KTX_ENDIAN_REF != header.endianness) {
+				swap(header.glType);
+				swap(header.glTypeSize);
+				swap(header.glFormat);
+				swap(header.glInternalFormat);
+				swap(header.glBaseInternalFormat);
+				swap(header.pixelWidth);
+				swap(header.pixelHeight);
+				swap(header.pixelDepth);
+				swap(header.numberOfArrayElements);
+				swap(header.numberOfFaces);
+				swap(header.numberOfMipmapLevels);
+				swap(header.bytesOfKeyValueData);
+			}
+
+			header.numberOfArrayElements = std::max(1U, header.numberOfArrayElements);
+			header.numberOfFaces = std::max(1U, header.numberOfFaces);
+			header.numberOfMipmapLevels = std::max(1U, header.numberOfMipmapLevels);
+			header.pixelDepth = std::max(1U, header.pixelDepth);
+
+			format_ = GLtoImagingMode(header.glInternalFormat);
+			if (format_ == MODE_ERROR) return;
+
+			p += sizeof(Header);
+			if (p + header.bytesOfKeyValueData > end) return;
+
+			for (uint32_t i = 0; i < header.bytesOfKeyValueData; ) {
+				uint32_t keyAndValueByteSize = *(uint32_t*)(p + i);
+				if (KTX_ENDIAN_REF != header.endianness) swap(keyAndValueByteSize);
+				std::string kv(p + i + 4, p + i + 4 + keyAndValueByteSize);
+				i += keyAndValueByteSize + 4;
+				i = (i + 3) & ~3;
+			}
+
+			p += header.bytesOfKeyValueData;
+			for (uint32_t mipLevel = 0; mipLevel != header.numberOfMipmapLevels; ++mipLevel) {
+
+				// bugfix for arraylayers and faces not being factored into final size for this mip
+				uint32_t layerImageSize;
+				if constexpr (WorkaroundLayerSizeDoubledInFileBug) {  // KTX ImageViewer export array texture doubles layer size written to file, sometimes...
+					layerImageSize = *(uint32_t*)(p) / header.numberOfArrayElements;
+				}
+				else {
+					layerImageSize = *(uint32_t*)(p);
+				}
+
+				layerImageSize = (layerImageSize + 3) & ~3;
+				if (KTX_ENDIAN_REF != header.endianness) swap(layerImageSize);
+
+				layerImageSizes_.push_back(layerImageSize);
+
+				uint32_t imageSize = layerImageSize * header.numberOfFaces * header.numberOfArrayElements;
+
+				imageSize = (imageSize + 3) & ~3;
+				if (KTX_ENDIAN_REF != header.endianness) swap(imageSize);
+
+				imageSizes_.push_back(imageSize);
+
+				p += 4; // offset for reading layer imagesize above
+				imageOffsets_.push_back((uint32_t)(p - begin));
+
+				if (p + imageSize > end) {
+					// see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+					// fix bugs... https://github.com/dariomanesku/cmft/issues/29
+					header.numberOfMipmapLevels = mipLevel + 1;
+					break;
+				}
+				p += imageSize; // next mip offset if there is one
+			}
+
+			ok_ = true;
+		}
+
+		uint32_t offset(uint32_t mipLevel, uint32_t arrayLayer, uint32_t face) const {
+
+			return imageOffsets_[mipLevel] + (arrayLayer * header.numberOfFaces + face) * layerImageSizes_[mipLevel];
+		}
+
+		uint32_t size(uint32_t mipLevel) {
+			return imageSizes_[mipLevel];
+		}
+
+		bool ok() const { return ok_; }
+		eIMAGINGMODE const format() const { return format_; }
+		uint32_t mipLevels() const { return header.numberOfMipmapLevels; }
+		uint32_t arrayLayers() const { return header.numberOfArrayElements; }
+		uint32_t faces() const { return header.numberOfFaces; }
+		uint32_t width(uint32_t const mipLevel = 0) const { return mipScale(header.pixelWidth, mipLevel); }
+		uint32_t height(uint32_t const mipLevel = 0) const { return mipScale(header.pixelHeight, mipLevel); }
+		uint32_t depth(uint32_t const mipLevel = 0) const { return mipScale(header.pixelDepth, mipLevel); }
+
+		ImagingMemoryInstance* const __restrict upload(uint8_t const* const __restrict pFileBegin) const {
+			uint32_t totalActualSize(0);
+
+			for (auto const& size : imageSizes_) {
+				totalActualSize += size;
+			}
+
+			if (0 == totalActualSize)
+				return(nullptr);
+
+			switch (format())
+			{
+			case MODE_BGRA:
+				return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(), height()));
+			case MODE_LA:
+				return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(), height()));
+			case MODE_L:
+				return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(), height()));
+			}
+			
+			return(nullptr);
+		}
+
+	private:
+		static void swap(uint32_t& value) {
+			value = value >> 24 | (value & 0xff0000) >> 8 | (value & 0xff00) << 8 | value << 24;
+		}
+
+		struct Header {
+			uint8_t identifier[12];
+			uint32_t endianness;
+			uint32_t glType;
+			uint32_t glTypeSize;
+			uint32_t glFormat;
+			uint32_t glInternalFormat;
+			uint32_t glBaseInternalFormat;
+			uint32_t pixelWidth;
+			uint32_t pixelHeight;
+			uint32_t pixelDepth;
+			uint32_t numberOfArrayElements;
+			uint32_t numberOfFaces;
+			uint32_t numberOfMipmapLevels;
+			uint32_t bytesOfKeyValueData;
+		};
+
+		Header header;
+		eIMAGINGMODE format_;
+		bool ok_ = false;
+		std::vector<uint32_t> imageOffsets_;
+		std::vector<uint32_t> imageSizes_;
+		std::vector<uint32_t> layerImageSizes_;
+	};
+} // end ns
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath)
+{
+	Imaging returnKTX(nullptr);
+
+	std::error_code error{};
+
+	mio::mmap_source mmap = mio::make_mmap_source(filenamepath, error);
+	if (!error) {
+
+		if (mmap.is_open() && mmap.is_mapped()) {
+			__prefetch_vmem(mmap.data(), mmap.size());
+
+			uint8_t const* const pReadPointer((uint8_t*)mmap.data());
+
+			KTXFileLayout const ktxFile(pReadPointer, pReadPointer + mmap.length());
+
+			if (ktxFile.ok()) {
+
+				return(ktxFile.upload(pReadPointer));
+			}
+		}
+
+	}
+
+	return(nullptr);
 }

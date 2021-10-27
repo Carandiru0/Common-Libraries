@@ -10,6 +10,7 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #pragma once
 #include <tbb\cache_aligned_allocator.h>
 #include <Utility/mem.h>
+#include <Utility/class_helper.h>
 
 #ifdef BIT_ROW_ATOMIC
 #include <atomic>
@@ -21,7 +22,7 @@ using bits = size_t;
 #define bit_function __declspec(safebuffers) __forceinline
 
 template<size_t const Length>  // must be divisable by 64 //
-class alignas(64) bit_row
+struct no_vtable bit_row
 {
 	static constexpr size_t const element_bits = 6;
 	static constexpr size_t const element_count = (1 << element_bits);	// block size (64 = (1 << 6))
@@ -38,11 +39,13 @@ public:
 	bit_function bits const* const __restrict data() const { return(_bits); }
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
-	__forceinline constexpr size_t const size() const { return(stride * sizeof(bits)); }
+	constexpr size_t const size() const { return(stride * sizeof(bits)); }
 
 private:
-	bits			_bits[stride] = {};
-	
+	bits	_bits[stride] = {};
+
+
+	[[maybe_unused]] uint8_t __padding[CACHE_LINE_BYTES << 1]; // padding to prevent false sharing *do not remove*
 public:
 	// static public methods that should be used for construction/destruction of bit_volume on the heap. These provide alignment support on a cacheline to avoid some false sharing.
 	__declspec(safebuffers) static inline bit_row<Length>* const __restrict create(size_t const row_count = 1)
@@ -115,7 +118,7 @@ template<size_t const Length>
 bit_function bool const bit_row<Length>::read_bit(size_t const index) const
 {
 	size_t const block(index >> element_bits);
-	size_t const bit(1ull << (index & (element_count - 1))); // remainder, divisor is always power of two (element_count) "(index % 64) == (index & (64-1))"
+	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count) "(index % 64) == (index & (64-1))"
 
 	return((_bits[block] & bit) == bit);
 }
@@ -124,7 +127,7 @@ template<size_t const Length>
 bit_function void bit_row<Length>::set_bit(size_t const index)
 {
 	size_t const block(index >> element_bits);
-	size_t const bit(1ull << (index & (element_count - 1))); // remainder, divisor is always power of two (element_count)
+	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
 
 	// set
 	_bits[block] |= bit;
@@ -134,7 +137,7 @@ template<size_t const Length>
 bit_function void bit_row<Length>::clear_bit(size_t const index)
 {
 	size_t const block(index >> element_bits);
-	size_t const bit(1ull << (index & (element_count - 1))); // remainder, divisor is always power of two (element_count)
+	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
 
 	// clear
 	_bits[block] &= (~bit);
@@ -143,12 +146,12 @@ bit_function void bit_row<Length>::clear_bit(size_t const index)
 template<size_t const Length>
 bit_function void bit_row<Length>::write_bit(size_t const index, bool const state)
 {
-	if (state) { // set
-		set_bit(index);
-	}
-	else { // clear
-		clear_bit(index);
-	}
+	size_t const block(index >> element_bits);
+	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
+
+	// Conditionally set or clear bits without branching
+	// https://graphics.stanford.edu/~seander/bithacks.html#ConditionalSetOrClearBitsWithoutBranching
+	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
 }
 
 

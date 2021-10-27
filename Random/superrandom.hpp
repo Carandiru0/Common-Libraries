@@ -119,6 +119,8 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 /// ############# IMPL #################### //
 #ifdef RANDOM_IMPLEMENTATION
 
+#include <tbb/concurrent_unordered_map.h>
+
 #if RANDOM_KEY_SEED
 #include <Utility/instructionset.h>
 #endif

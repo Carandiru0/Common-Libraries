@@ -796,3 +796,5 @@ uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb)
 
 	return(SFM::pack_rgba(linear));
 }
+
+

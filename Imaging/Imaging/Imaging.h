@@ -55,7 +55,9 @@ enum eIMAGINGMODE
 	MODE_LAB = (1 << 12),
 	MODE_HSV = (1 << 13),
 	MODE_BC7 = (1 << 14),
-	MODE_BC6A = (1 << 15)
+	MODE_BC6A = (1 << 15),
+
+	MODE_ERROR
 };
 
 /* pixel types */
@@ -252,6 +254,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstrin
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
 ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);
 ImagingLUT* const __restrict __vectorcall			 ImagingLoadLUT(std::wstring_view const cubefilenamepath);
 

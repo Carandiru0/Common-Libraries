@@ -275,7 +275,7 @@ public:
 #endif
 		return(false); // task is finished
 	}
-	static bool const initialize(unsigned long const (&cores)[2]); // must be called once when appropriate at program start-up
+	static bool const initialize(unsigned long const (&cores)[2], uint32_t const thread_stack_size = 0); // must be called once when appropriate at program start-up
 	static void cancel_all();
 	static bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX) );  // optional timeout parameter - default is infinite, 0 would simply return if a wait is needed, all other alues are milliseconds
 private:
@@ -298,11 +298,12 @@ private:
 	template<thread_id_t const thread>
 	static void record_task_id(task_id_t const task);
 private:
-	static std::atomic_flag									_alive[thread_count];
-	static void*											_hThread[thread_count];
-	static tbb::atomic<int32_t>								_current_priority[thread_count];
-	static tbb::atomic<task_id_t>							_current_task[thread_count],
+	constinit static std::atomic_flag						_alive[thread_count];
+	constinit static void*									_hThread[thread_count];
+	constinit static tbb::atomic<int32_t>					_current_priority[thread_count];
+	constinit static tbb::atomic<task_id_t>					_current_task[thread_count],
 															_last_task[thread_count][HISTORY_SZ];
+
 	static tbb::concurrent_queue< internal_only::async_work const* > _items[thread_count];
 	
 public:
@@ -323,15 +324,15 @@ inline task_id_t const async_long_task::_enqueue(internal_only::async_work const
 #include <Windows.h>
 
 inline tbb::concurrent_queue< internal_only::async_work const* >		async_long_task::_items[thread_count];
-inline std::atomic_flag													async_long_task::_alive[thread_count]{};
-inline tbb::atomic<int32_t>												async_long_task::_current_priority[thread_count]{0};
-inline tbb::atomic<task_id_t>											async_long_task::_current_task[thread_count]{ 0 };
-inline tbb::atomic<task_id_t>											async_long_task::_last_task[thread_count][HISTORY_SZ]{ 0 };
-inline void*															async_long_task::_hThread[thread_count]{ nullptr };
+constinit inline std::atomic_flag										async_long_task::_alive[thread_count]{};
+constinit inline tbb::atomic<int32_t>									async_long_task::_current_priority[thread_count]{0};
+constinit inline tbb::atomic<task_id_t>									async_long_task::_current_task[thread_count]{ 0 };
+constinit inline tbb::atomic<task_id_t>									async_long_task::_last_task[thread_count][HISTORY_SZ]{ 0 };
+constinit inline void*													async_long_task::_hThread[thread_count]{ nullptr };
 
-namespace internal_only
+namespace // private to this file (anonymous)
 {
-	static inline async_long_task	_async_long_task_owner;		// the only private inaccesible instance
+	constinit static inline async_long_task	_async_long_task_owner{};		// the only private inaccesible instance
 }
 
 void async_long_task::wake_up(thread_id_t const thread)
@@ -452,21 +453,21 @@ void __cdecl async_long_task::background_thread(void*)
 template<thread_id_t const thread>
 void async_long_task::record_task_id(task_id_t const task)
 {
-	static uint32_t index[thread_count]{ 0 };	// unique to thread only by template parameter
+	constinit static uint32_t index[thread_count]{ 0 };	// unique to thread only by template parameter
 
 	_last_task[thread][index[thread]] = task;
 
 	index[thread] = (index[thread] + 1) & (HISTORY_SZ - 1);
 }
 
-bool const async_long_task::initialize(unsigned long const (&cores)[2])
+bool const async_long_task::initialize(unsigned long const (&cores)[2], uint32_t const thread_stack_size)
 {
 	// initialized state must be done before creation of thread
 	_alive[background_critical].test_and_set(); // set to alive state so thread doesn't immediately exit
 	_alive[background].test_and_set(); // set to alive state so thread doesn't immediately exit
 
-	_hThread[background_critical] = (void* const)_beginthread(&async_long_task::background_thread<background_critical>, 0, nullptr);
-	_hThread[background] = (void* const)_beginthread(&async_long_task::background_thread<background>, 0, nullptr);
+	_hThread[background_critical] = (void* const)_beginthread(&async_long_task::background_thread<background_critical>, thread_stack_size, nullptr);
+	_hThread[background] = (void* const)_beginthread(&async_long_task::background_thread<background>, thread_stack_size, nullptr);
 
 	if (_hThread[background_critical] && _hThread[background]) {
 

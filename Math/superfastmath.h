@@ -489,7 +489,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		// -1, 0, or +1
 		// Comparisons are not branching
 		// https://www.finblackett.com/bithacks
-		return( (a > 0.0f) - (a < 0.0f) );
+		return( ((float)((a > 0.0f) - (a < 0.0f))) );
 	}
 	STATIC_INLINE_PURE int32_t const __vectorcall sgn(int32_t const a) // branchless!
 	{

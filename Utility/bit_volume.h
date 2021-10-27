@@ -10,6 +10,7 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #pragma once
 #include <tbb\cache_aligned_allocator.h>
 #include <Utility/mem.h>
+#include <Utility/class_helper.h>
 
 #ifdef BIT_VOLUME_ATOMIC
 #include <atomic>
@@ -21,7 +22,7 @@ using bits = size_t;
 #define bit_function __declspec(safebuffers) __forceinline
 
 template<size_t const Width, size_t const Height, size_t const Depth>  // All components must be divisable by 64 //
-class alignas(64) bit_volume
+struct no_vtable bit_volume
 {
 	static constexpr size_t const element_bits = 6;
 	static constexpr size_t const element_count = (1 << element_bits);	// block size (64 = (1 << 6))
@@ -56,7 +57,7 @@ public:
 		tbb::cache_aligned_allocator< bit_volume<Width, Height, Depth> > allocator;
 		bit_volume<Width, Height, Depth>* const __restrict pReturn(static_cast<bit_volume<Width, Height, Depth>*const __restrict>(allocator.allocate(1)));
 
-		__memclr_stream<64>(pReturn, sizeof(bit_volume<Width, Height, Depth>));
+		__memclr_stream<CACHE_LINE_BYTES>(pReturn, sizeof(bit_volume<Width, Height, Depth>));
 
 		return(pReturn);
 	}

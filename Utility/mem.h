@@ -42,12 +42,13 @@ INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __
 // [very large copies]
 template<size_t const alignment>
 INLINE_MEMFUNC __memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE)); // defaults to 4KB block/thread, customize based on total size *must be power of 2*
-																																					   // for best results, data should be aligned
+																																	   // for best results, data should be aligned
 																																					   // best alignment is CACHE_LINE_BYTES (64) to mitigate false sharing!
 // [virtusl memory]
 // for prefetching a memory into virtual memory, ensuring it is not paged from disk multiple times if said memory is accessed for example a memory mapped file
 // this avoids a continous amount of page faults that cause delays of millions of cycles potentially by ensuring the data pointed to by memory is cached before the first access
 INLINE_MEMFUNC  __prefetch_vmem(void const* const __restrict address, size_t const bytes);
+
 
 // [fences] //
 INLINE_MEMFUNC __streaming_store_fence()
@@ -134,6 +135,7 @@ INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, siz
 namespace internal_mem
 {
 	static constexpr size_t const _cache_size = MINIMUM_PAGE_SIZE;
+
 	extern __declspec(selectany) inline thread_local constinit alignas(CACHE_LINE_BYTES) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
 
 	// *internal only to be used with _streaming_cache as dest.
@@ -149,7 +151,7 @@ namespace internal_mem
 #pragma loop( ivdep )
 		for (; bytes >= CACHE_LINE_BYTES; bytes -= CACHE_LINE_BYTES) {
 
-			_mm_prefetch((const CHAR*)s + CACHE_LINE_BYTES, _MM_HINT_NTA); // fetch next iteration NTA
+			_mm_prefetch((const char*)s + CACHE_LINE_BYTES, _MM_HINT_NTA); // fetch next iteration NTA
 
 			// expolit both integer and floating point "uop ports"
 			_mm256_store_si256((__m256i*)d, _mm256_stream_load_si256((__m256i*)s));
@@ -193,7 +195,7 @@ namespace internal_mem
 #pragma loop( ivdep )
 		for (; bytes >= CACHE_LINE_BYTES; bytes -= CACHE_LINE_BYTES) {
 
-			_mm_prefetch((const CHAR*)s + CACHE_LINE_BYTES, _MM_HINT_T0); // fetch next iteration T0
+			_mm_prefetch((const char*)s + CACHE_LINE_BYTES, _MM_HINT_T0); // fetch next iteration T0
 
 			// expolit both integer and floating point "uop ports"
 			_mm256_stream_si256((__m256i*)d, _mm256_load_si256((__m256i*)s));
@@ -242,12 +244,12 @@ INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __
 
 		_mm_mfence(); // isolates streaming loads from streaming stores
 
-		_mm_prefetch((const CHAR*)s, _MM_HINT_NTA);
+		_mm_prefetch((const char*)s, _MM_HINT_NTA);
 		internal_mem::__memcpy_stream_load<alignment>(cache, s, block_size);
 
 		_mm_mfence(); // isolates streaming loads from streaming stores
 
-		_mm_prefetch((const CHAR*)cache, _MM_HINT_T0);
+		_mm_prefetch((const char*)cache, _MM_HINT_T0);
 		internal_mem::__memcpy_stream_store<alignment>(d, cache, block_size);
 
 		d += block_size; s += block_size;
@@ -258,12 +260,12 @@ INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __
 
 		_mm_mfence(); // isolates streaming loads from streaming stores
 
-		_mm_prefetch((const CHAR*)s, _MM_HINT_NTA);
+		_mm_prefetch((const char*)s, _MM_HINT_NTA);
 		internal_mem::__memcpy_stream_load<alignment>(cache, s, bytes);
 
 		_mm_mfence(); // isolates streaming loads from streaming stores
 
-		_mm_prefetch((const CHAR*)cache, _MM_HINT_T0);
+		_mm_prefetch((const char*)cache, _MM_HINT_T0);
 		internal_mem::__memcpy_stream_store<alignment>(d, cache, bytes);
 	}
 
@@ -273,7 +275,6 @@ INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __
 template<size_t const alignment>
 INLINE_MEMFUNC __memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size)
 {
-	tbb::affinity_partitioner part;
 	tbb::parallel_for(
 		tbb::blocked_range<__m256i const* __restrict>((__m256i* const __restrict)src, (__m256i* const __restrict)(((uint8_t const* const __restrict)src) + bytes), block_size),
 		[&](tbb::blocked_range<__m256i const* __restrict> block) {
@@ -283,7 +284,7 @@ INLINE_MEMFUNC __memcpy_threaded(void* const __restrict dest, void const* const 
 
 			__memcpy_stream<alignment>((__m256i* const __restrict)(((uint8_t const* const __restrict)dest) + offset), block.begin(), (size_t const)current_block_size);
 		}
-	, part);
+	);
 }
 
 INLINE_MEMFUNC  __prefetch_vmem(void const* const __restrict address, size_t const bytes)
@@ -292,3 +293,5 @@ INLINE_MEMFUNC  __prefetch_vmem(void const* const __restrict address, size_t con
 
 	PrefetchVirtualMemory(GetCurrentProcess(), 1, &entry, 0);
 }
+
+
