@@ -2118,8 +2118,6 @@ namespace
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath)
 {
-	Imaging returnKTX(nullptr);
-
 	std::error_code error{};
 
 	mio::mmap_source mmap = mio::make_mmap_source(filenamepath, error);

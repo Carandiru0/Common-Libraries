@@ -573,6 +573,26 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(XMVectorSelect(_mm_set_ps1(1.0f), _mm_setzero_ps(), XMVectorLess(x, edge)));
 	}
 
+	STATIC_INLINE_PURE float const __vectorcall bellcurve(float x) // 0..1 input to 0..1 output *or* -1...1 input to 0...1 output
+	{
+		// mu is 0.0 (centered) sigma is 0.5
+		constexpr float const c(XM_PI / -1.25331414f); // optimized magic value - bellcurve perfect match (to six digits of precision) - removes sqrt
+												     // https://www.desmos.com/calculator/xxwdiqa4sk
+		x = 2.0f * x;  // converts input range
+		
+		return(SFM::__exp(x * x * c));
+	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall bellcurve(XMVECTOR x) // 0..1 input to 0..1 output *or* -1...1 input to 0...1 output
+	{
+		// mu is 0.0 (centered) sigma is 0.5
+		constexpr float const c(XM_PI / -1.25331414f); // optimized magic value - bellcurve perfect match (to six digits of precision) - removes sqrt
+													   // https://www.desmos.com/calculator/xxwdiqa4sk
+
+		x = XMVectorMultiply(x, XMVectorReplicate(2.0f));  // converts input range
+
+		return(SFM::__exp(XMVectorMultiply(XMVectorMultiply(x, x), XMVectorReplicate(c)))); // range after is [0.0f...1.0f]
+	}
+
 	STATIC_INLINE_PURE float const __vectorcall smoothfract(float const Sn)
 	{
 		// smoothstep(.001, .999 - step(.4, SFM::abs(x - .5)), x - step(.9, x))
