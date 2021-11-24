@@ -11,19 +11,19 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #include <tbb\cache_aligned_allocator.h>
 #include <Utility/mem.h>
 #include <Utility/class_helper.h>
-
-#ifdef BIT_VOLUME_ATOMIC
 #include <atomic>
-using bits = std::atomic_size_t;
-#else
-using bits = size_t;
-#endif
 
 #define bit_function __declspec(safebuffers) __forceinline
 
 template<size_t const Width, size_t const Height, size_t const Depth>  // All components must be divisable by 64 //
 struct no_vtable bit_volume
 {
+#ifdef BIT_VOLUME_ATOMIC
+	using bits = std::atomic_size_t;
+#else
+	using bits = size_t;
+#endif
+
 	static constexpr size_t const element_bits = 6;
 	static constexpr size_t const element_count = (1 << element_bits);	// block size (64 = (1 << 6))
 	static_assert((0 == Width % element_count) && (0 == Height % element_count) && (0 == Depth % element_count), "bit_volume dimensions are invalid");
@@ -46,6 +46,7 @@ public:
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
 	__forceinline constexpr size_t const size() const { return(stride * sizeof(bits)); }
+	void clear();
 
 private:
 	bits			_bits[stride] = {};
@@ -126,20 +127,28 @@ bit_function void bit_volume<Width, Height, Depth>::clear_bit(size_t const x, si
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const index, bool const state)
 {
-	if (state) { // set
-		set_bit(index);
-	}
-	else { // clear
-		clear_bit(index);
-	}
+	size_t const block(index >> element_bits);
+	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
+
+	// Conditionally set or clear bits without branching
+	// https://graphics.stanford.edu/~seander/bithacks.html#ConditionalSetOrClearBitsWithoutBranching
+	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
 }
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const x, size_t const y, size_t const z, bool const state)
 {
-	if (state) { // set
-		set_bit(x, y, z);
-	}
-	else { // clear
-		clear_bit(x, y, z);
+	write_bit(get_index(x, y, z));
+}
+
+template<size_t const Width, size_t const Height, size_t const Depth>
+void bit_volume<Width, Height, Depth>::clear()
+{
+	__m256i const xmZero(_mm256_setzero_si256());
+
+	for (size_t bits = 0; bits < (Width * Height * Depth); bits += 256) { // by total bits (length), 256 bits / iteration
+
+		size_t const block(bits >> element_bits);	// 4 elements per 256 bits
+
+		_mm256_store_si256((__m256i* const __restrict)(_bits + block), xmZero);
 	}
 }

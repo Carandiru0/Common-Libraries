@@ -11,25 +11,24 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #include <tbb\cache_aligned_allocator.h>
 #include <Utility/mem.h>
 #include <Utility/class_helper.h>
-
-#ifdef BIT_ROW_ATOMIC
 #include <atomic>
-using bits = std::atomic_size_t;
-#else
-using bits = size_t;
-#endif
 
 #define bit_function __declspec(safebuffers) __forceinline
 
 template<size_t const Length>  // must be divisable by 64 //
 struct no_vtable bit_row
 {
+#ifdef BIT_ROW_ATOMIC
+	using bits = std::atomic_size_t;
+#else
+	using bits = size_t;
+#endif
+
 	static constexpr size_t const element_bits = 6;
 	static constexpr size_t const element_count = (1 << element_bits);	// block size (64 = (1 << 6))
 	static_assert((0 == Length % element_count), "bit_row length invalid");
 
 	static constexpr size_t const stride = { Length / element_count };	// number of blocks for each dimension
-
 public:
 	bit_function bool const   read_bit(size_t const index) const;
 	bit_function void		  set_bit(size_t const index);
@@ -40,10 +39,10 @@ public:
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
 	constexpr size_t const size() const { return(stride * sizeof(bits)); }
+	void clear();
 
 private:
 	bits	_bits[stride] = {};
-
 
 	[[maybe_unused]] uint8_t __padding[CACHE_LINE_BYTES << 1]; // padding to prevent false sharing *do not remove*
 public:
@@ -53,7 +52,7 @@ public:
 		tbb::cache_aligned_allocator< bit_row<Length> > allocator;
 		bit_row<Length>* const __restrict pReturn(static_cast<bit_row<Length>*const __restrict>(allocator.allocate(row_count)));
 
-		__memclr_stream<64>(pReturn, row_count * sizeof(bit_row<Length>));
+		__memclr_stream<CACHE_LINE_BYTES>(pReturn, row_count * sizeof(bit_row<Length>));
 
 		return(pReturn);
 	}
@@ -154,6 +153,17 @@ bit_function void bit_row<Length>::write_bit(size_t const index, bool const stat
 	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
 }
 
+template<size_t const Length>
+void bit_row<Length>::clear()
+{
+	__m256i const xmZero(_mm256_setzero_si256());
 
+	for (size_t bits = 0; bits < Length; bits += 256) { // by total bits (length), 256 bits / iteration
+
+		size_t const block(bits >> element_bits);	// 4 elements per 256 bits
+
+		_mm256_store_si256((__m256i* const __restrict)(_bits + block), xmZero);
+	}
+}
 
 

@@ -60,7 +60,7 @@ public:
 	template<class... Args>
 	STATIC_INLINE T& emplace_back(Args&&... args)
 	{
-		return(*_elements.emplace(std::forward<Args&&...>(args...)));
+		return(*_elements.emplace(std::forward<Args>(args)...)); // *bugfix - this is the proper syntax for variadic argument expansion to forward types to plf::colony::emplace()
 	}
 
 	STATIC_INLINE auto const remove(iterator const& it) // default remove method (recommended)
