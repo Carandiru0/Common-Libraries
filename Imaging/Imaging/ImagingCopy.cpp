@@ -549,6 +549,39 @@ void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict A, Imaging
 	}
 }
 
+void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, ImagingMemoryInstance const* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT)
+{
+	uint32_t const height(B->ysize);
+	uint32_t const width(B->xsize);
+
+	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(out->block));
+	uint32_t const* const __restrict blockA(reinterpret_cast<uint32_t const* const>(A->block));
+	uint32_t const* const __restrict blockB(reinterpret_cast<uint32_t const* const>(B->block));
+
+	static constexpr float const NORMALIZE = 1.0f / float(UINT8_MAX);
+	static constexpr float const DENORMALIZE = float(UINT8_MAX);
+	XMVECTOR const xmNorm(_mm_set1_ps(NORMALIZE));
+	XMVECTOR const xmDeNorm(_mm_set1_ps(DENORMALIZE));
+
+	for (uint32_t y = 0; y < height; ++y) {
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			uint32_t const pixel(y * width + x);
+
+			uvec4_t rgba_srcA, rgba_srcB;
+			SFM::unpack_rgba(blockA[pixel], rgba_srcA.r, rgba_srcA.g, rgba_srcA.b, rgba_srcA.a);
+			SFM::unpack_rgba(blockB[pixel], rgba_srcB.r, rgba_srcB.g, rgba_srcB.b, rgba_srcB.a);
+
+			// floating point precision is best in [0.0f ... 1.0f] range, so normalizing before lerp then denormalization after is a huge benefit
+			uvec4_t rgba_dst;
+			SFM::saturate_to_u8(XMVectorMultiply(xmDeNorm, SFM::lerp(XMVectorMultiply(xmNorm, uvec4_v(rgba_srcA).v4f()), XMVectorMultiply(xmNorm, uvec4_v(rgba_srcB).v4f()), tT)), rgba_dst);
+
+			blockOut[pixel] = SFM::pack_rgba(rgba_dst.r, rgba_dst.g, rgba_dst.b, rgba_dst.a);
+		}
+	}
+}
+
 // overwrites input
 void __vectorcall ImagingLUTLerp(ImagingLUT* const __restrict A, ImagingLUT const* const __restrict B, float const tT)
 {
@@ -1254,6 +1287,24 @@ ImagingLUT* const __restrict __vectorcall ImagingLoadLUT(std::wstring_view const
 	}
 
 	return(lut);
+}
+
+void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage)
+{
+	bool bReturn(false);
+
+	uint8_t* __restrict pOut(reinterpret_cast<uint8_t* const __restrict>(pDstMemory));
+	uint8_t const * __restrict pIn(pSrcImage->block);
+	uint32_t const stride = pSrcImage->linesize;
+
+	int scanline(pSrcImage->ysize);
+	while (0 != scanline) {
+
+		memcpy(pOut, pIn, stride);
+		pOut += stride; pIn += stride;
+
+		--scanline;
+	}
 }
 
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath)

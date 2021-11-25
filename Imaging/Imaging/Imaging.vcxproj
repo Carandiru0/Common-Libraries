@@ -48,7 +48,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>ClangCL</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
     <UseIntelTBB>true</UseIntelTBB>
@@ -159,8 +159,7 @@
       <CallingConvention>Cdecl</CallingConvention>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <ExceptionHandling>false</ExceptionHandling>
-      <IntelJCCErratum>
-      </IntelJCCErratum>
+      <IntelJCCErratum>true</IntelJCCErratum>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <UndefinePreprocessorDefinitions>
       </UndefinePreprocessorDefinitions>
@@ -178,8 +177,7 @@
       </IgnoreAllDefaultLibraries>
       <ForceSymbolReferences>
       </ForceSymbolReferences>
-      <LinkTimeCodeGeneration>
-      </LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>true</LinkTimeCodeGeneration>
       <TargetMachine>MachineX64</TargetMachine>
     </Lib>
     <ProjectReference>

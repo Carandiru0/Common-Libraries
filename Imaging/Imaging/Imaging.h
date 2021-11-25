@@ -185,6 +185,7 @@ extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(Imag
 extern ImagingSequence* const __restrict __vectorcall		 ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter);
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im);
 void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src, float const tT); // im_dst = A, im_src = B, op: A = lerp(A, B, t)
+void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, ImagingMemoryInstance const* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT);
 void __vectorcall ImagingLUTLerp(ImagingLUT* const __restrict lut_dst, ImagingLUT const* const __restrict lut_src, float const tT);
 void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src);
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
@@ -244,9 +245,6 @@ typedef struct ImagingSuperPaletteInfo {
 ImagingMemoryInstance* const __restrict __vectorcall ImagingGenerateSuperPalette1D(ImagingSuperPaletteInfo& __restrict out_info, ImagingMemoryInstance const* const __restrict palette_basic = nullptr);
 
 
-// INDIVIDUAL SPECIAL PALETTES //
-
-
 // LOADING //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height);
@@ -263,6 +261,9 @@ ImagingLUT* const __restrict __vectorcall			 ImagingLoadLUT(std::wstring_view co
 // supports only loading BGRA
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring_view const filenamepath);
 #endif
+
+// RAW COPY 
+void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage);
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);

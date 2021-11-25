@@ -448,6 +448,7 @@ void __cdecl async_long_task::background_thread(void*)
 		// the software interrupt has been queued and is executing transparently / hidden //
 	}
 	_alive[thread].clear(); // signal a clean exit
+	_endthread();
 }
 
 template<thread_id_t const thread>

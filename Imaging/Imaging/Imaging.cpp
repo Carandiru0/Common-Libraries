@@ -50,7 +50,7 @@ gray2bgrx(uint8_t* __restrict out, uint8_t const* __restrict in, int const xsize
 		*out++ = uiGrayLevel;
 		*out++ = uiGrayLevel;
 		*out++ = uiGrayLevel;
-		*out++ = uiGrayLevel;
+		*out++ = uiGrayLevel ? 0xff : uiGrayLevel;
 	}
 }
 
@@ -524,7 +524,7 @@ ImagingError_Clear(void)
 }
 
 
-constexpr static inline uint8_t const srgb_to_linear_lut[256] = { // single channel
+constinit static inline uint8_t const srgb_to_linear_lut[256] = { // single channel
 	0,
 	0,
 	0,
