@@ -28,23 +28,24 @@ static constexpr size_t const MINIMUM_PAGE_SIZE = 4096ull; // Windows Only, cann
 INLINE_MEMFUNC __streaming_store_fence();
 
 // [clears]
-/* use memset */
+/* use native intrinsic memset() for unaligned data, otherwise __memclr_stream & __memset_strean are better */
 template<size_t const alignment>
 INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes);   // for streaming stores/non-temporal / write combined memory dest
 template<size_t const alignment>
 INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, size_t bytes);	// for streaming stores/non-temporal / write combined memory dest
 
 // [copies]
-/* use memcpy */
+/* use the native intrinsic memcpy() for small data - if it's a *large* copy __memcpy_stream is better. */
 template<size_t const alignment>
 INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __restrict src, size_t bytes);	// for streaming stores/non-temporal larger than L2 cache size copies / write combined memory dest
 
 // [very large copies]
+/* use the native intrinsic memcpy() for small data - if it's a *very large* copy __memcpy_threaded is better. */
 template<size_t const alignment>
 INLINE_MEMFUNC __memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE)); // defaults to 4KB block/thread, customize based on total size *must be power of 2*
 																																	   // for best results, data should be aligned
 																																					   // best alignment is CACHE_LINE_BYTES (64) to mitigate false sharing!
-// [virtusl memory]
+// [virtual memory]
 // for prefetching a memory into virtual memory, ensuring it is not paged from disk multiple times if said memory is accessed for example a memory mapped file
 // this avoids a continous amount of page faults that cause delays of millions of cycles potentially by ensuring the data pointed to by memory is cached before the first access
 INLINE_MEMFUNC  __prefetch_vmem(void const* const __restrict address, size_t const bytes);
@@ -57,7 +58,36 @@ INLINE_MEMFUNC __streaming_store_fence()
 }
 
 // [clears]] //
-template<size_t const alignment>
+
+template<> // aligned to 16 bytes specialization
+INLINE_MEMFUNC __memclr_stream<16>(void* const __restrict dest, size_t bytes)
+{
+	static constexpr size_t const element_size = sizeof(__m128i);
+
+	alignas(16) uint8_t* __restrict d((uint8_t * __restrict)std::assume_aligned<16>(dest));
+
+	__m128i const xmZero(_mm_setzero_si128());
+
+	// 32 bytes / iteration
+#pragma loop( ivdep )
+	for (; bytes >= CACHE_LINE_BYTES; bytes -= (CACHE_LINE_BYTES >> 1)) {
+		// expolit both integer and floating point "uop ports"
+		_mm_stream_si128((__m128i* __restrict)d, xmZero);
+		_mm_stream_ps((float* const __restrict)(((__m128*)d) + 1), _mm_castsi128_ps(xmZero));
+
+		d += (CACHE_LINE_BYTES >> 1);
+	}
+
+	// 16 bytes / iteration
+#pragma loop( ivdep )
+	for (; bytes >= element_size; bytes -= element_size) {
+
+		_mm_stream_si128((__m128i* __restrict)d, xmZero);
+
+		d += element_size;
+	}
+}
+template<size_t const alignment> // any other alignment greater than 16
 INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 {
 	static constexpr size_t const element_size = sizeof(__m256i);
@@ -70,7 +100,7 @@ INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 #pragma loop( ivdep )
 	for (; bytes >= CACHE_LINE_BYTES; bytes -= CACHE_LINE_BYTES) {
 		// expolit both integer and floating point "uop ports"
-		_mm256_stream_si256((__m256i*)d, xmZero);
+		_mm256_stream_si256((__m256i* __restrict)d, xmZero);
 		_mm256_stream_ps((float* const __restrict)(((__m256*)d) + 1), _mm256_castsi256_ps(xmZero));
 
 		d += CACHE_LINE_BYTES;
@@ -80,7 +110,7 @@ INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 #pragma loop( ivdep )
 	for (; bytes >= element_size; bytes -= element_size) {
 
-		_mm256_stream_si256((__m256i*)d, xmZero);
+		_mm256_stream_si256((__m256i* __restrict)d, xmZero);
 
 		d += element_size;
 	}
@@ -89,12 +119,41 @@ INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 #pragma loop( ivdep )
 	for (; bytes >= (element_size >> 1); bytes -= (element_size >> 1)) {
 
-		_mm_stream_si128((__m128i*)d, _mm256_castsi256_si128(xmZero));
+		_mm_stream_si128((__m128i* __restrict)d, _mm256_castsi256_si128(xmZero));
 
 		d += (element_size >> 1);
 	}
 }
-template<size_t const alignment>
+
+template<> // aligned to 16 bytes specialization
+INLINE_MEMFUNC __memset_stream<16>(void* const __restrict dest, int const value, size_t bytes)
+{
+	static constexpr size_t const element_size = sizeof(__m128i);
+
+	alignas(16) uint8_t* __restrict d((uint8_t * __restrict)std::assume_aligned<16>(dest));
+
+	__m128i const xmValue(_mm_set1_epi32(value));
+
+	// 32 bytes / iteration
+#pragma loop( ivdep )
+	for (; bytes >= CACHE_LINE_BYTES; bytes -= (CACHE_LINE_BYTES >> 1)) {
+		// expolit both integer and floating point "uop ports"
+		_mm_stream_si128((__m128i* __restrict)d, xmValue);
+		_mm_stream_ps((float* const __restrict)(((__m128*)d) + 1), _mm_castsi128_ps(xmValue));
+
+		d += (CACHE_LINE_BYTES >> 1);
+	}
+
+	// 16 bytes / iteration
+#pragma loop( ivdep )
+	for (; bytes >= element_size; bytes -= element_size) {
+
+		_mm_stream_si128((__m128i* __restrict)d, xmValue);
+
+		d += element_size;
+	}
+}
+template<size_t const alignment> // any other alignment greater than 16
 INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, size_t bytes)
 {
 	static constexpr size_t const element_size = sizeof(__m256i);
@@ -136,7 +195,7 @@ namespace internal_mem
 {
 	static constexpr size_t const _cache_size = MINIMUM_PAGE_SIZE;
 
-	extern __declspec(selectany) inline thread_local constinit uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
+	constinit extern __declspec(selectany) inline thread_local alignas(32) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
 
 	// *internal only to be used with _streaming_cache as dest.
 	template<size_t const alignment>
