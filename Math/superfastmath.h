@@ -54,7 +54,7 @@ using namespace DirectX;
 		[-]		[-]		[-]		[-]
 */
 
-
+#ifndef SFM_NO_OVERRIDES
 
 #ifdef fma
 #undef fma
@@ -181,6 +181,8 @@ using namespace DirectX;
 #ifndef powf
 #define powf SFM::__pow
 #endif
+
+#endif // SFM_NO_OVERRIDES
 
 namespace SFM	// (s)uper (f)ast (m)ath
 {
@@ -1368,12 +1370,6 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 
 	// http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
-	// 
-	// 
-	// 
-	// 
-	// 
-	// 
 	namespace rgbToHSV_Konstants {
 		XMGLOBALCONST inline XMVECTORF32 const _c0{ { { 0.0f, -1.0f / 3.0f, 2.0f / 3.0f, -1.0f } } };
 		//XMGLOBALCONST inline XMVECTORF32 const _c1{ { { 1.0f, 1.0f, 1.0f, 0.0f } } };

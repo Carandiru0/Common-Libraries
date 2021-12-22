@@ -1,6 +1,4 @@
 #pragma once
-#define INCLUDE_PNG_SUPPORT 0
-#define INCLUDE_JPEG_SUPPORT 0
 
 #include <stdint.h>
 #include "LinkImaging.h"
@@ -189,8 +187,8 @@ void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, Imagi
 void __vectorcall ImagingLUTLerp(ImagingLUT* const __restrict lut_dst, ImagingLUT const* const __restrict lut_src, float const tT);
 void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src);
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
-
-void __vectorcall ImagingSRGBtoLinear(ImagingMemoryInstance* const __restrict im); // @todo
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE)  ** image must be square (width == height)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) ** image must be square (width == height)
 
 // BGRX in - BGR out
 void __vectorcall Parallel_BGRX2BGR(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,
@@ -253,17 +251,21 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(u
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
 
+// LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
 ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);
 ImagingLUT* const __restrict __vectorcall			 ImagingLoadLUT(std::wstring_view const cubefilenamepath);
 
 #if INCLUDE_PNG_SUPPORT
-// supports only loading BGRA
+// supports only loading BGRA  *** there is a bug in lodepng where the colors are off. consider a different png library -this will not be fixed.
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring_view const filenamepath);
 #endif
 
 // RAW COPY 
 void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage);
+
+// CONVERS?ION //
+ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);
@@ -282,6 +284,7 @@ bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* const __re
 bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* __restrict const* const __restrict pSrcImage, uint32_t const image_count, std::wstring_view const filenamepath);		// sequence/array images //
 #endif
 
+// SaveToKTX will save in the as is (no colorspace conversion) [ linear ]. If the data for the image is supposed to be SRGB, use ImageView to export a srgb copy.
 bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
 bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* const* const __restrict pSrcImages, uint32_t const numLayers, std::wstring_view const filenamepath);
 bool const __vectorcall ImagingSaveCompressedBC7ToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);

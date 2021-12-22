@@ -1,5 +1,7 @@
 #pragma once
 #include <stdint.h>
+#include <type_traits>
+#include <array>
 
 // MUST define RANDOM_IMPLEMENTATION in only ONE c file before include
 
@@ -119,10 +121,29 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 /// ############# IMPL #################### //
 #ifdef RANDOM_IMPLEMENTATION
 
-#include <tbb/concurrent_unordered_map.h>
+#include <tbb/concurrent_unordered_map.h> // required external header
 
 #if RANDOM_KEY_SEED
+
+#ifndef VC_EXTRALEAN
+#define VC_EXTRALEAN
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN	// Exclude rarely-used stuff from Windows headers
+#endif
+
+#define NOMINMAX
+#define _SECURE_SCL 0 
+#define _ITERATOR_DEBUG_LEVEL 0
+#define _SILENCE_CXX17_UNCAUGHT_EXCEPTION_DEPRECATION_WARNING
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+
+#define _WIN32_WINNT 0x0A00
+#define _STL_WIN32_WINNT _WIN32_WINNT
+#include <SDKDDKVer.h> // required for QueryPerformanceCounter
+
 #include <Utility/instructionset.h>
+#include <Windows.h>  // required for QueryPerformanceCounter
 #endif
 
 #include <Math/superfastmath.h>

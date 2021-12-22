@@ -671,6 +671,54 @@ void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im
 	}
 }
 
+// image[y][x] // assuming this is the original orientation 
+// image[x][original_width - y] // rotated 90 degrees ccw
+// image[original_height - x][y] // 90 degrees cw 
+// image[original_height - y][original_width - x] // 180 degrees
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im)
+{
+	uint32_t const height(im->ysize);
+	uint32_t const width(im->xsize);
+
+	Imaging img_returned(ImagingNew(im->mode, width, height));
+
+	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
+	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
+
+	uvec4_t rgba_dst{}, rgba_src{};
+
+	for (uint32_t y = 0; y < height; ++y) {
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			blockOut[(height - 1 - x) * width + y] = blockIn[y * width + x]; // image[original_height - x][y] // 90 degrees cw 
+		}
+	}
+
+	return(img_returned);
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im)
+{
+	uint32_t const height(im->ysize);
+	uint32_t const width(im->xsize);
+
+	Imaging img_returned(ImagingNew(im->mode, width, height));
+
+	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
+	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
+
+	uvec4_t rgba_dst{}, rgba_src{};
+
+	for (uint32_t y = 0; y < height; ++y) {
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			blockOut[x * width + (width - 1 - y)] = blockIn[y * width + x]; // image[x][original_width - y] // rotated 90 degrees ccw
+		}
+	}
+
+	return(img_returned);
+}
 static ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRaw(eIMAGINGMODE const mode, std::wstring_view const filenamepath, int const width, int const height)
 {
 	Imaging returnL(nullptr);
@@ -1307,6 +1355,42 @@ void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance c
 	}
 }
 
+ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
+{
+	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);
+
+	if (width != pSrcImageA->xsize
+		|| height != pSrcImageA->ysize) {
+
+		return(nullptr); // assume both L images passed in are the same dimensions.
+	}
+
+	Imaging returnLA(ImagingNew(MODE_LA, width, height));
+
+	uint8_t* __restrict pOut = returnLA->block;
+	uint8_t const* __restrict pInL = pSrcImageL->block;  // L
+	uint8_t const* __restrict pInA = pSrcImageA->block;  // A
+
+	uint32_t const stride = pSrcImageL->linesize; // using checked src dimensions, want iterations in bytes.
+
+	uint32_t scanline(height);
+	while (0 != scanline) {
+
+		uint32_t bytes(stride);
+		while (0 != bytes) {
+		
+			*pOut++ = *pInL++;
+			*pOut++ = *pInA++;
+
+			--bytes;
+		}
+
+		--scanline;
+	}
+
+	return(returnLA);
+}
+
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath)
 {
 	bool bReturn(false);
@@ -1767,12 +1851,11 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	};
 
 	FILE* fOut;
+	KtxHeader header = {};
+	memcpy(header.identifier, ktx_magic_id, 12);
 
-	if (((MODE_L | MODE_LA | MODE_BGRX | MODE_BGRA) & pSrcImages[0]->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (((MODE_L | MODE_LA | MODE_BGRX | MODE_BGRA) & pSrcImages[0]->mode))
 	{
-		KtxHeader header = {};
-		memcpy(header.identifier, ktx_magic_id, 12);
-
 		header.endianness = KTX_ENDIAN_REF;
 		header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
 		header.glTypeSize = pSrcImages[0]->pixelsize;
@@ -1803,13 +1886,22 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 		header.numberOfFaces = 1;
 		header.numberOfMipmapLevels = 1;
 		header.bytesOfKeyValueData = 0;
+	}
+	else if (MODE_BC7 == pSrcImages[0]->mode)
+	{
+		return(false); // todo when needed
 
+	}
+	else
+		return(false);
+
+	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	{
 		// write header
 		fwrite(&header, sizeof(KtxHeader), 1, fOut);
 
 		// write size of data
 		uint32_t const layerDataSize(pSrcImages[0]->xsize * pSrcImages[0]->ysize * pSrcImages[0]->pixelsize);
-		//uint32_t const dataSize(layerDataSize * numLayers);
 		fwrite(&layerDataSize, sizeof(uint32_t), 1, fOut);
 
 		// write data
@@ -1985,21 +2077,31 @@ namespace
 		switch (glFormat) {
 		case 0x8229: return MODE_L;
 		case 0x1903: return MODE_L;
+		case 0x8FBD: return MODE_L;
 
 		case 0x822B: return MODE_LA;
 		case 0x8227: return MODE_LA;
+		case 0x8FBE: return MODE_LA;
 
+		case 0x80E0: return MODE_RGB; // GL_BGR
+		case 0x8051: return MODE_RGB; // GL_RGB
 		case 0x1907: return MODE_RGB; // GL_RGB
+		case 0x8C41: return MODE_RGB; // VK_FORMAT_B8G8R8_SRGB
 
-		case 0x8058: return MODE_BGRX; // GL_RGBA
-		case 0x1908: return MODE_BGRX; // GL_RGBA
+		case 0x80E1: return MODE_BGRA; // GL_BGRA
+		case 0x8058: return MODE_BGRA; // GL_RGBA
+		case 0x1908: return MODE_BGRA; // GL_RGBA
+		case 0x8C43: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB
 
+		/*
 		case 0x83F0: return MODE_ERROR; // GL_COMPRESSED_RGB_S3TC_DXT1_EXT
 		case 0x83F1: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
 		case 0x83F2: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
 		case 0x83F3: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
 		case 0x8E8C: return MODE_ERROR;	// GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
 		case 0x8E8D: return MODE_ERROR;
+		*/
+
 		}
 		return MODE_ERROR;
 	}
