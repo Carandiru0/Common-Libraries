@@ -55,7 +55,7 @@ typedef union alignas(16) point2D
 	__forceinline __vectorcall point2D(size_t const x0, size_t const y0) : v(_mm_set_epi32(0, 0, (uint32_t)y0, (uint32_t)x0))   // only need 32bits
 	{}
 	// conversion from float to int defaults to floor, same as v2_to_p2D. If rounding is desired(rarely) use default ctor with v2_to_p2D_rounded instead
-	__forceinline __vectorcall point2D(float const x0, float const y0) : v(_mm_cvtps_epi32(_mm_round_ps(_mm_set_ps(0.0f, 0.0f, y0, x0), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)))
+	__forceinline __vectorcall point2D(float const x0, float const y0) : v(_mm_cvtps_epi32(_mm_round_ps(_mm_set_ps(0.0f, 0.0f, y0, x0), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)))  // floor(v)
 	{}
 	__forceinline explicit __vectorcall point2D(__m128i const vSrc) : v(vSrc)
 	{}

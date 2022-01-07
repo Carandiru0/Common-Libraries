@@ -208,10 +208,8 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	VCONST v_const_d vsignbits_d{ 0x8000000000000000, 0x8000000000000000 };
 
 	STATIC_INLINE_PURE double const __vectorcall abs(double const a) {
-		__declspec(align(16)) double dReturn;
-
-		_mm_store_sd(&dReturn, _mm_andnot_pd(vsignbits_d, _mm_set_sd(a)));
-		return(dReturn);
+		
+		return(_mm_cvtsd_f64(_mm_andnot_pd(vsignbits_d, _mm_set_sd(a))));
 	}
 	STATIC_INLINE_PURE float const __vectorcall abs(float const a) {
 
@@ -320,9 +318,12 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(_mm256_castps256_ps128(_mm256_rsqrt_ps(_mm256_castps128_ps256(A))));
 	}
 
-	// fused multiply add:
+	// fused multiply add/subtract:
 	//
-
+	STATIC_INLINE_PURE double const __vectorcall __fma(double const A, double const B, double const C)
+	{
+		return(_mm_cvtsd_f64(_mm_fmadd_sd(_mm_set_sd(A), _mm_set_sd(B), _mm_set_sd(C))));
+	}
 	STATIC_INLINE_PURE float const __vectorcall __fma(float const A, float const B, float const C)
 	{
 		return(_mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(A), _mm_set_ss(B), _mm_set_ss(C))));
@@ -332,6 +333,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(_mm_fmadd_ps(A, B, C));
 	}
 
+	STATIC_INLINE_PURE double const __vectorcall __fms(double const A, double const B, double const C)
+	{
+		return(_mm_cvtsd_f64(_mm_fmsub_sd(_mm_set_sd(A), _mm_set_sd(B), _mm_set_sd(C))));
+	}
 	STATIC_INLINE_PURE float const __vectorcall __fms(float const A, float const B, float const C)
 	{
 		return(_mm_cvtss_f32(_mm_fmsub_ss(_mm_set_ss(A), _mm_set_ss(B), _mm_set_ss(C))));
@@ -469,12 +474,12 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(SFM::abs(sfract(Sn)));	// faster unsigned fractional part
 	}
 
-	STATIC_INLINE_PURE float const __vectorcall mod(float const Sn, float& fIntegral)
+	STATIC_INLINE_PURE float const __vectorcall mod(float const Sn, float& fInteger)
 	{
 		// returns unsigned fractional part, store integral part in fIntegral
 
 		float const fFractional = SFM::fract(Sn);
-		fIntegral = Sn - fFractional;
+		fInteger = Sn - fFractional;
 		return(fFractional); // faster than C99 modff
 	}
 
@@ -503,7 +508,13 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 	// interpolation & easing:
 	//
-
+	STATIC_INLINE_PURE double const __vectorcall lerp(double const A, double const B, double const tNorm)
+	{
+		//A = __fma(tNorm, B, (1 - tNorm)*A)		// ok
+		//A = __fma(tNorm, B, __fma(-tNorm, A, A));	// better
+		//A = __fma(B - A, tNorm, A);				// best
+		return(__fma(B - A, tNorm, A));
+	}
 	STATIC_INLINE_PURE float const __vectorcall lerp(float const A, float const B, float const tNorm)
 	{
 		//A = __fma(tNorm, B, (1 - tNorm)*A)		// ok

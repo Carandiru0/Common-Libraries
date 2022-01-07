@@ -78,13 +78,12 @@ class alignas(32) async_long_task : no_copy
 public:
 	enum beats
 	{
-		min = 1,
-		frame = 33,
-		half = 500,
-		full = 1000,
-		max = full
+		yield = 0,		// SleepEx(0, FALSE) returns immediately but reliquinshes the time slice for the thread.
+		minimum = 1,	// 1ms
+		frame = 33,		// 33ms
+		half_second = 500,
+		full_second = 1000
 	};
-
 private:
 	enum async_priority_t
 	{
@@ -284,7 +283,8 @@ private:
 
 	static void wake_up(thread_id_t const thread);
 private:
-	static void __stdcall background_apc(unsigned long long);
+	template<thread_id_t const thread>
+	static void background_task();
 
 	template<thread_id_t const thread>
 	static inline void process_async_queue(tbb::concurrent_queue< internal_only::async_work const* >& q);
@@ -299,6 +299,7 @@ private:
 	static void record_task_id(task_id_t const task);
 private:
 	constinit static std::atomic_flag						_alive[thread_count];
+	constinit static void*									_hQueued[thread_count];
 	constinit static void*									_hThread[thread_count];
 	constinit static tbb::atomic<int32_t>					_current_priority[thread_count];
 	constinit static tbb::atomic<task_id_t>					_current_task[thread_count],
@@ -321,6 +322,22 @@ inline task_id_t const async_long_task::_enqueue(internal_only::async_work const
 }
 
 #ifdef ASYNC_LONG_TASK_IMPLEMENTATION
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00
+#endif
+#ifndef _STL_WIN32_WINNT
+#define _STL_WIN32_WINNT _WIN32_WINNT
+#endif
+#ifndef VC_EXTRALEAN
+#define VC_EXTRALEAN
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN	// Exclude rarely-used stuff from Windows headers
+#endif
+
+#define NOMINMAX
+
 #include <Windows.h>
 
 inline tbb::concurrent_queue< internal_only::async_work const* >		async_long_task::_items[thread_count];
@@ -329,6 +346,7 @@ constinit inline tbb::atomic<int32_t>									async_long_task::_current_priority
 constinit inline tbb::atomic<task_id_t>									async_long_task::_current_task[thread_count]{ 0 };
 constinit inline tbb::atomic<task_id_t>									async_long_task::_last_task[thread_count][HISTORY_SZ]{ 0 };
 constinit inline void*													async_long_task::_hThread[thread_count]{ nullptr };
+constinit inline void*													async_long_task::_hQueued[thread_count]{ nullptr };
 
 namespace // private to this file (anonymous)
 {
@@ -357,16 +375,7 @@ void async_long_task::wake_up(thread_id_t const thread)
 			}
 		}
 
-		if (0 == QueueUserAPC(&async_long_task::background_apc, _hThread[thread], thread)) // always posts to assigned thread handle
-		{
-#if !defined(NDEBUG) && VERBOSE_LOGGING_ASYNC_LONG_TASK
-			DWORD const dwErr = GetLastError();
-			FMT_LOG_WARN(INFO_LOG, "could not wake up {:s}, last error {:d}", 
-				((background_critical == thread) ? "critical" : "background"),
-				dwErr
-				);
-#endif
-		}
+		SetEvent(_hQueued[thread]);
 	}
 }
 
@@ -414,23 +423,16 @@ inline void async_long_task::process_work()
 	process_async_queue<thread>(_items[thread]);
 }
 
-void __stdcall async_long_task::background_apc(unsigned long long mode)
+template<thread_id_t const thread>
+void async_long_task::background_task()
 {
-	thread_id_t const thread((thread_id_t const)mode);
-
-	if (background_critical == thread) {
-		process_work<background_critical>();
-	}
-	else {
-		process_work<background>();
-	}
+	process_work<thread>();
 
 	// always revert to idle priority
 	[[likely]] if (nullptr != _hThread[thread]) {
 
 		_current_priority[thread] = priority_idle;
 		SetThreadPriority(_hThread[thread], priority_idle);			// lowest idle cpu usage
-
 	}
 }
 
@@ -443,9 +445,10 @@ void __cdecl async_long_task::background_thread(void*)
 
 	[[likely]] while (_alive[thread].test_and_set()) // if returns false, means flag was cleared - signaling its time to exit thread
 	{
-		SleepEx(INFINITE, TRUE); // always sleeping but in "alertable state", thread only runs when there is work (wake_up)
-
-		// the software interrupt has been queued and is executing transparently / hidden //
+		// wait until work is queued
+		WaitForSingleObject(_hQueued[thread], INFINITE); // *bugfix: better than an APC and SleepEx w/alertable state. Less latency, simpler.
+		// do the work //
+		background_task<thread>();
 	}
 	_alive[thread].clear(); // signal a clean exit
 	_endthread();
@@ -466,6 +469,9 @@ bool const async_long_task::initialize(unsigned long const (&cores)[2], uint32_t
 	// initialized state must be done before creation of thread
 	_alive[background_critical].test_and_set(); // set to alive state so thread doesn't immediately exit
 	_alive[background].test_and_set(); // set to alive state so thread doesn't immediately exit
+
+	_hQueued[background_critical] = CreateEvent(nullptr, FALSE, FALSE, nullptr); // queued signal per thread
+	_hQueued[background] = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 
 	_hThread[background_critical] = (void* const)_beginthread(&async_long_task::background_thread<background_critical>, thread_stack_size, nullptr);
 	_hThread[background] = (void* const)_beginthread(&async_long_task::background_thread<background>, thread_stack_size, nullptr);
@@ -494,7 +500,7 @@ bool const async_long_task::wait_for_all(milliseconds const timeout)
 	while( (bWaitState = !(_items[background_critical].empty() & _items[background].empty())) )
 	{
 		_mm_pause(); // hint to processor
-		SleepEx(beats::min, TRUE); // lower cpu usage, yield to another thread
+		SleepEx(beats::yield, FALSE); // lower cpu usage, yield to another thread
 
 		[[unlikely]] if (critical_now() - tStart >= duration_cast<nanoseconds>(timeout)) {
 			break;
@@ -511,7 +517,7 @@ void async_long_task::cancel_all()
 	// dummy apc call which will exit the thread
 	wake_up(background_critical); wake_up(background);
 
-	SleepEx(beats::frame, FALSE); // yield to the threads
+	SleepEx(beats::yield, FALSE); // yield to the threads
 }
 
 async_long_task::~async_long_task() 
@@ -531,10 +537,11 @@ async_long_task::~async_long_task()
 		while (_alive[current_thread].test_and_set()) {
 
 			_mm_pause(); // hint to processor
-			SleepEx(beats::min, TRUE); // lower cpu usage, yield to another thread
+			SleepEx(beats::yield, FALSE); // lower cpu usage, yield to another thread
 		}
-	}
 
+		CloseHandle(_hQueued[current_thread]); _hQueued[current_thread] = nullptr;
+	}
 }
 
 

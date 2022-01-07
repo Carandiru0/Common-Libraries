@@ -13,6 +13,8 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #include <Utility/class_helper.h>
 #include <atomic>
 
+#pragma warning( disable : 4804 )	// unsafe use of type bool in write_bit() (its ok for this case)
+
 #define bit_function __declspec(safebuffers) __forceinline
 
 template<size_t const Length>  // must be divisable by 64 //
