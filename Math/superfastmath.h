@@ -827,6 +827,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	//
 
 	/// #### ceiling
+	STATIC_INLINE_PURE double const __vectorcall ceil(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_f64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE float const __vectorcall ceil(float const a) //sse4 required
 	{
 		return(_mm_cvtss_f32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC)));
@@ -835,13 +839,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(_mm_round_ps(a, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC));
 	}
+	STATIC_INLINE_PURE int64_t const __vectorcall ceil_to_i64(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_si64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE int32_t const __vectorcall ceil_to_i32(float const a) //sse4 required
 	{
 		return(_mm_cvtss_si32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC)));
 	}
 	STATIC_INLINE_PURE ivec4_v const __vectorcall ceil_to_i32(FXMVECTOR const a) //sse4 required
 	{
-		return(ivec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC))));
+		return(ivec4_v(_mm_cvtps_epi32(ceil(a))));
+	}
+	STATIC_INLINE_PURE uint64_t const __vectorcall ceil_to_u64(double const a) //sse4 required
+	{
+		return((uint64_t)ceil_to_i64(a));
 	}
 	STATIC_INLINE_PURE uint32_t const __vectorcall ceil_to_u32(float const a) //sse4 required
 	{
@@ -849,7 +861,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 	STATIC_INLINE_PURE uvec4_v const __vectorcall ceil_to_u32(FXMVECTOR const a) //sse4 required
 	{
-		return(uvec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC))));
+		return(uvec4_v(_mm_cvtps_epi32(ceil(a))));
 	}
 	template<class T>
 	struct ceiling			/// #### So this is HOW todo function dispatch based on type at compile time! ##### ////
@@ -858,6 +870,11 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		template< bool cond, typename U >
 		using resolvedType = typename std::enable_if< cond, U >::type;
 
+		template< typename U = T >
+		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, double>::value, U > const __vectorcall ceil(double const a)
+		{
+			return(SFM::ceil(a));
+		}
 		template< typename U = T >
 		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, float>::value, U > const __vectorcall ceil(float const a)
 		{
@@ -875,12 +892,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		}
 	};
 	template <typename T>
+	constexpr STATIC_INLINE_PURE T const __vectorcall ceil(double const a) //sse4 required
+	{ // default double returned function must be defined b4 this func and rounding struct 
+		return(ceiling<T>::ceil(a));
+	}
+	template <typename T>
 	constexpr STATIC_INLINE_PURE T const __vectorcall ceil(float const a) //sse4 required
 	{ // default float returned function must be defined b4 this func and rounding struct 
 		return(ceiling<T>::ceil(a));
 	}
 
 	/// #### flooring
+	STATIC_INLINE_PURE double const __vectorcall floor(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_f64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE float const __vectorcall floor(float const a) //sse4 required
 	{
 		return(_mm_cvtss_f32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));
@@ -889,13 +915,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(_mm_round_ps(a, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC));
 	}
+	STATIC_INLINE_PURE int64_t const __vectorcall floor_to_i64(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_si64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE int32_t const __vectorcall floor_to_i32(float const a) //sse4 required
 	{
 		return(_mm_cvtss_si32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));
 	}
 	STATIC_INLINE_PURE ivec4_v const __vectorcall floor_to_i32(FXMVECTOR const a) //sse4 required
 	{
-		return(ivec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC))));
+		return(ivec4_v(_mm_cvtps_epi32(floor(a))));
+	}
+	STATIC_INLINE_PURE uint64_t const __vectorcall floor_to_u64(double const a) //sse4 required
+	{
+		return((uint64_t)floor_to_i64(a));
 	}
 	STATIC_INLINE_PURE uint32_t const __vectorcall floor_to_u32(float const a) //sse4 required
 	{
@@ -903,7 +937,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 	STATIC_INLINE_PURE uvec4_v const __vectorcall floor_to_u32(FXMVECTOR const a) //sse4 required
 	{
-		return(uvec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC))));
+		return(uvec4_v(_mm_cvtps_epi32(floor(a))));
 	}
 	template<class T>
 	struct flooring			/// #### So this is HOW todo function dispatch based on type at compile time! ##### ////
@@ -912,6 +946,11 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		template< bool cond, typename U >
 		using resolvedType = typename std::enable_if< cond, U >::type;
 
+		template< typename U = T >
+		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, double>::value, U > const __vectorcall floor(double const a)
+		{
+			return(SFM::floor(a));
+		}
 		template< typename U = T >
 		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, float>::value, U > const __vectorcall floor(float const a)
 		{
@@ -929,12 +968,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		}
 	};
 	template <typename T>
+	constexpr STATIC_INLINE_PURE T const __vectorcall floor(double const a) //sse4 required
+	{ // default double returned function must be defined b4 this func and rounding struct 
+		return(flooring<T>::floor(a));
+	}
+	template <typename T>
 	constexpr STATIC_INLINE_PURE T const __vectorcall floor(float const a) //sse4 required
 	{ // default float returned function must be defined b4 this func and rounding struct 
 		return(flooring<T>::floor(a));
 	}
 
 	/// ######### rounding
+	STATIC_INLINE_PURE double const __vectorcall round(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_f64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE float const __vectorcall round(float const a) //sse4 required
 	{
 		return(_mm_cvtss_f32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC)));
@@ -943,13 +991,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(_mm_round_ps(a, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
 	}
+	STATIC_INLINE_PURE int64_t const __vectorcall round_to_i64(double const a) //sse4 required
+	{
+		return(_mm_cvtsd_si64(_mm_round_pd(_mm_set1_pd(a), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC)));
+	}
 	STATIC_INLINE_PURE int32_t const __vectorcall round_to_i32(float const a) //sse4 required
 	{
 		return(_mm_cvtss_si32(_mm_round_ps(_mm_set1_ps(a), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC)));
 	}
 	STATIC_INLINE_PURE ivec4_v const __vectorcall round_to_i32(FXMVECTOR const a) //sse4 required
 	{
-		return(ivec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC))));
+		return(ivec4_v(_mm_cvtps_epi32(round(a))));
+	}
+	STATIC_INLINE_PURE uint64_t const __vectorcall round_to_u64(double const a) //sse4 required
+	{
+		return((uint64_t)round_to_i64(a));
 	}
 	STATIC_INLINE_PURE uint32_t const __vectorcall round_to_u32(float const a) //sse4 required
 	{
@@ -957,9 +1013,8 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 	STATIC_INLINE_PURE uvec4_v const __vectorcall round_to_u32(FXMVECTOR const a) //sse4 required
 	{
-		return(uvec4_v(_mm_cvtps_epi32(_mm_round_ps(a, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC))));
+		return(uvec4_v(_mm_cvtps_epi32(round(a))));
 	}
-
 	template<class T>
 	struct rounding			/// #### So this is HOW todo function dispatch based on type at compile time! ##### ////
 	{
@@ -967,6 +1022,11 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		template< bool cond, typename U >
 		using resolvedType = typename std::enable_if< cond, U >::type;
 
+		template< typename U = T >
+		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, double>::value, U > const __vectorcall round(double const a)
+		{
+			return(SFM::round(a));
+		}
 		template< typename U = T >
 		constexpr STATIC_INLINE_PURE resolvedType< std::is_same<U, float>::value, U > const __vectorcall round(float const a)
 		{
@@ -984,10 +1044,16 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		}
 	};
 	template <typename T>
+	constexpr STATIC_INLINE_PURE T const __vectorcall round(double const a) //sse4 required
+	{ // default double returned function must be defined b4 this func and rounding struct 
+		return(rounding<T>::round(a));
+	}
+	template <typename T>
 	constexpr STATIC_INLINE_PURE T const __vectorcall round(float const a) //sse4 required
 	{ // default float returned function must be defined b4 this func and rounding struct 
 		return(rounding<T>::round(a));
 	}
+
 
 	// bit hacks and tricks:
 	//
