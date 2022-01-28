@@ -109,24 +109,26 @@ struct ImagingMemoryInstance {
 
 					/* Virtual methods */
 	void(*destroy)(Imaging im);
+
+	constexpr ImagingMemoryInstance(int const bands_, int32_t const pixelsize_)
+		:
+		bands(bands_),
+		pixelsize(pixelsize_)
+	{}
+
+	constexpr ImagingMemoryInstance() = default;
 };
 
-typedef struct ImagingSequenceInstance // much easier to redefine than to inherit ImagingMemoryInstance
+typedef struct ImagingSequenceInstance : ImagingMemoryInstance // much easier to redefine than to inherit ImagingMemoryInstance
 {
 	uint32_t delay;
 
-	static inline constexpr uint32_t const bands = 3;		/* BGRX --======= */
-	uint32_t xsize;		/* Image dimension. */
-	uint32_t ysize;
-
-	/* Data pointers */
-	uint8_t* __restrict block;
 	/* Virtual methods */
 	void(*destroy)(ImagingSequenceInstance* __restrict im);
 
-	static inline constexpr uint32_t const pixelsize = sizeof(uint32_t);	/* Size of a pixel, in bytes (1, 2 or 4) */
-	uint32_t linesize;	/* Size of a line, in bytes (xsize * pixelsize) */
-
+	constexpr ImagingSequenceInstance()
+		: ImagingMemoryInstance(3, sizeof(uint32_t)) /* initially limited here to be comptabile with BGRX for gif output when gif is loaded, can be changed after load of gif */
+	{}
 } ImagingSequenceInstance;
 
 typedef struct ImagingSequence

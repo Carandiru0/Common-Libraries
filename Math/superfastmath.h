@@ -229,6 +229,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(_mm_cvtsi128_si32(_mm_abs_epi32(_mm_set1_epi32(a))));
 	}
 
+	STATIC_INLINE_PURE double const __vectorcall min(double const a, double const b) {
+
+		return(_mm_cvtsd_f64(_mm_min_sd(_mm_set_sd(a), _mm_set_sd(b))));
+	}
 	STATIC_INLINE_PURE float const __vectorcall min(float const a, float const b) {
 
 		return(_mm_cvtss_f32(_mm_min_ss(_mm_set_ss(a), _mm_set_ss(b))));
@@ -249,6 +253,11 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	STATIC_INLINE_PURE uint32_t const __vectorcall min(uint32_t const a, uint32_t const b) {
 
 		return((uint32_t)_mm_cvtsi128_si32(_mm_min_epu32(_mm_set1_epi32(a), _mm_set1_epi32(b))));
+	}
+
+	STATIC_INLINE_PURE double const __vectorcall max(double const a, double const b) {
+
+		return(_mm_cvtsd_f64(_mm_max_sd(_mm_set_sd(a), _mm_set_sd(b))));
 	}
 	STATIC_INLINE_PURE float const __vectorcall max(float const a, float const b) {
 
