@@ -483,13 +483,19 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(SFM::abs(sfract(Sn)));	// faster unsigned fractional part
 	}
 
-	STATIC_INLINE_PURE float const __vectorcall mod(float const Sn, float& fInteger)
+	STATIC_INLINE_PURE float const __vectorcall mod(float const Sn, float& fInteger)  // mod > breaks number into integer and fractional components.
 	{
 		// returns unsigned fractional part, store integral part in fIntegral
 
 		float const fFractional = SFM::fract(Sn);
 		fInteger = Sn - fFractional;
 		return(fFractional); // faster than C99 modff
+	}
+
+	STATIC_INLINE_PURE float const __vectorcall fmod(float const x, float const y)	// fmod > computes the remainder of x/y (remainder of float is it's fractional component) - more akin to glsl's function named "mod(x,y)"
+	{
+		// V1 % V2 = V1 - V2 * truncate(V1 / V2)    ( truncate is like floor excepts it rounds to zero instead of neg inf )
+		return(_mm_cvtss_f32(XMVectorMod(_mm_set1_ps(x), _mm_set1_ps(y)))); // faster than C99 fmodf
 	}
 
 	// Extended sign: returns -1, 0 or 1 based on sign of a

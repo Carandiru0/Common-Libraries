@@ -26,7 +26,8 @@ namespace stringconv
 			return(towlower(x) < towlower(y));
 		}
 	};
-	bool const NoCaseLess(std::wstring_view const& a, std::wstring_view const& b);
+	bool const case_insensitive_compare(std::wstring_view const& a, std::wstring_view const& b);
+
 	/*
 	inline std::wstring const trim(const std::wstring &s)
 	{
@@ -52,17 +53,46 @@ namespace stringconv
 		s.erase(remove_if(s.begin(), s.end(), isspace), s.end());
 		return(s);
 	}
-	inline void toLower(std::wstring& rsIn)
+
+	STATIC_INLINE_PURE char const toLower(char const c) { // speedy variant for ascii characters only
+		return(('A' <= c && c <= 'Z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+	}
+	STATIC_INLINE_PURE char const toUpper(char const c) { // speedy variant for ascii characters only
+		return(('a' <= c && c <= 'z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+	}
+	inline std::wstring const& toLower(std::wstring& rsIn)
 	{
-		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), towlower);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), tolower);
+		return(rsIn);
 	}
-	inline void toUpper(std::wstring& rsIn)
+	inline std::wstring const& toUpper(std::wstring& rsIn)
 	{
-		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), towupper);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
+		return(rsIn);
 	}
-	STATIC_INLINE_PURE char const ascii_toupper(char const c) { // speedy variant for ascii characters only
-		return( ('a' <= c && c <= 'z') ? c^0x20 : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+	inline std::string const& toLower(std::string& rsIn)
+	{
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), tolower);
+		return(rsIn);
 	}
+	inline std::string const& toUpper(std::string& rsIn)
+	{
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
+		return(rsIn);
+	}
+	inline std::string const toLower(char const* const sIn)
+	{
+		std::string rsIn(sIn);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), tolower);
+		return(rsIn);
+	}
+	inline std::string const toUpper(char const* const sIn)
+	{
+		std::string rsIn(sIn);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
+		return(rsIn);
+	}
+	
 }
 
 #ifdef STRINGCONV_IMPLEMENTATION
@@ -107,7 +137,7 @@ namespace stringconv
 		return(ws2s(errMsg));
 	}
 
-	bool const NoCaseLess(std::wstring_view const& a, std::wstring_view const& b)
+	bool const case_insensitive_compare(std::wstring_view const& a, std::wstring_view const& b)
 	{
 		return(std::lexicographical_compare(a.cbegin(), a.cend(), b.cbegin(), b.cend(), case_insensitive_less()));
 	}

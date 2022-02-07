@@ -35,7 +35,7 @@ eg.) in rng.c file:                                       *(only one C file)
 void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
 uint64_t const GetSecureSeed();
 void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Hash & Psuedo RNG functions *only*
-
+void ResetSeed(int64_t const Seed = 1); // optional "last seed" can be added to the seed that is reset too.
 
 
 // These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
@@ -430,7 +430,15 @@ void SetSeed(int64_t Seed)
 
 	oRandom.hashSeed = save_hash_seed; // restore saved hash seed value
 }
+void ResetSeed(int64_t const lastSeed)
+{
+	uint64_t const seed(GetSecureSeed() + lastSeed);
 
+	if (seed) {
+
+		SetSeed(seed);
+	}
+}
 // private for init only  //
 // private for init only  //
 static void InitializeRandomNumberGeneratorInstance()
