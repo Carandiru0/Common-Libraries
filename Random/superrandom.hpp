@@ -12,7 +12,7 @@
 eg.) in rng.c file:                                       *(only one C file)
 	#define RANDOM_IMPLEMENTATION
 	#define DETERMINISTIC_KEY_SEED 0xC00C1001
-	#include "superrandom.h"
+	#include "superrandom.hpp"
 */
 
 // ** advanced usage:
@@ -35,8 +35,7 @@ eg.) in rng.c file:                                       *(only one C file)
 void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
 uint64_t const GetSecureSeed();
 void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Hash & Psuedo RNG functions *only*
-void ResetSeed(int64_t const Seed = 1); // optional "last seed" can be added to the seed that is reset too.
-
+void SetSeed(int32_t Seed); // 32 bit seeds are ok, but 64 bit seeds are better
 
 // These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
 float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/);
@@ -115,7 +114,7 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 }
 [[deprecated]] static __inline void HashSetSeed(int32_t Seed) // for backwards compatibility
 {
-	SetSeed((int64_t)Seed);
+	SetSeed(Seed);
 }
 
 /// ############# IMPL #################### //
@@ -430,14 +429,10 @@ void SetSeed(int64_t Seed)
 
 	oRandom.hashSeed = save_hash_seed; // restore saved hash seed value
 }
-void ResetSeed(int64_t const lastSeed)
+void SetSeed(int32_t Seed)
 {
-	uint64_t const seed(GetSecureSeed() + lastSeed);
-
-	if (seed) {
-
-		SetSeed(seed);
-	}
+	// *bugfix - this increases the seed entropy and prevents errors with random number being the same successively *do not change*
+	SetSeed((((int64_t)Seed) << 32) | ((int64_t)Seed));
 }
 // private for init only  //
 // private for init only  //
@@ -536,7 +531,7 @@ void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 	// init step 0b
 	oRandom.Initialized = true; // set first so we prevent recursive initialization!
 	// init step 1
-	SetSeed(oRandom.reservedSeed);
+	SetSeed((int64_t)oRandom.reservedSeed);
 	oRandom.reserved_xorshift_state = oRandom.xorshift_state;  // only place should reserved_xorshift_state ever be "set"
 	// init step 2
 	oRandom.hashSeed = oRandom.reservedSeed; // after the next step the xorshift state will be synchronized.

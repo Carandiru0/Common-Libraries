@@ -1355,6 +1355,27 @@ void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance c
 	}
 }
 
+void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
+{
+	uint32_t const height(im->ysize);
+	uint32_t const width(im->xsize);
+
+	uint32_t* const __restrict block(reinterpret_cast<uint32_t* const>(im->block));
+
+	uvec4_t rgba_dst{};
+
+	for (uint32_t y = 0; y < height; ++y) {
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			uint32_t const pixel(y * width + x);
+
+			SFM::unpack_rgba(block[pixel], rgba_dst.r, rgba_dst.g, rgba_dst.b, rgba_dst.a);
+			block[pixel] = SFM::pack_rgba(rgba_dst.b, rgba_dst.g, rgba_dst.r, rgba_dst.a);
+		}
+	}
+}
+
 ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
 {
 	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);

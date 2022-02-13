@@ -19,14 +19,24 @@ namespace stringconv
 
 	std::string const getCOMError2s(HRESULT const& hr);
 
+
+	template<typename character_type>
 	struct case_insensitive_less
 	{
-		bool const operator () (wchar_t const x, wchar_t const y) const
+		template<typename q = character_type>
+		typename std::enable_if<std::is_same<q, wchar_t>::value, bool const>::type operator () (wchar_t const x, wchar_t const y) const
 		{
-			return(towlower(x) < towlower(y));
+			return(towupper(x) == towupper(y));
+		}
+
+		template<typename q = character_type>
+		typename std::enable_if<std::is_same<q, char>::value, bool const>::type operator () (char const x, char const y) const
+		{
+			return(toupper(x) == toupper(y));
 		}
 	};
 	bool const case_insensitive_compare(std::wstring_view const& a, std::wstring_view const& b);
+	bool const case_insensitive_compare(std::string_view const& a, std::string_view const& b);
 
 	/*
 	inline std::wstring const trim(const std::wstring &s)
@@ -139,7 +149,11 @@ namespace stringconv
 
 	bool const case_insensitive_compare(std::wstring_view const& a, std::wstring_view const& b)
 	{
-		return(std::lexicographical_compare(a.cbegin(), a.cend(), b.cbegin(), b.cend(), case_insensitive_less()));
+		return(std::equal(a.cbegin(), a.cend(), b.cbegin(), b.cend(), case_insensitive_less<wchar_t>()));
+	}
+	bool const case_insensitive_compare(std::string_view const& a, std::string_view const& b)
+	{
+		return(std::equal(a.cbegin(), a.cend(), b.cbegin(), b.cend(), case_insensitive_less<char>()));
 	}
 }
 #endif

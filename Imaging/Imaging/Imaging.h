@@ -166,11 +166,11 @@ uint32_t const ImagingSRGBtoLinear(uint32_t const srgb);
 
 // OPERATIONS //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingNew( eIMAGINGMODE const mode, int const xsize, int const ysize);
-ImagingLUT* const __restrict __vectorcall ImagingNew(int const size);
+ImagingLUT* const __restrict __vectorcall			 ImagingNew(int const size);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingNewCompressed(eIMAGINGMODE const mode /*should be MODE_BC7 or MODE_BC6A*/, int const xsize, int const ysize, int BufferSize);
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingCopy(ImagingMemoryInstance const* const __restrict im);
-ImagingLUT* const __restrict __vectorcall ImagingCopy(ImagingLUT const* const __restrict lut);
+ImagingLUT* const __restrict __vectorcall			 ImagingCopy(ImagingLUT const* const __restrict lut);
 
 void __vectorcall ImagingClear(ImagingMemoryInstance* __restrict im);
 
@@ -182,7 +182,7 @@ void __vectorcall ImagingDelete(ImagingLUT* __restrict im);
 void __vectorcall ImagingDelete(ImagingLUT const* __restrict im);
 
 extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter);
-extern ImagingSequence* const __restrict __vectorcall		 ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter);
+extern ImagingSequence* const __restrict __vectorcall		ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter);
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im);
 void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src, float const tT); // im_dst = A, im_src = B, op: A = lerp(A, B, t)
 void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, ImagingMemoryInstance const* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT);
@@ -267,7 +267,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring
 void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage);
 
 // CONVERS?ION //
-ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
+void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im); // Red and Blue component swap (INPLACE)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA); // (NOT INPLACE)
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);
