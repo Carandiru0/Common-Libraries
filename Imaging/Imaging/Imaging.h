@@ -182,7 +182,8 @@ void __vectorcall ImagingDelete(ImagingLUT* __restrict im);
 void __vectorcall ImagingDelete(ImagingLUT const* __restrict im);
 
 extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter);
-extern ImagingSequence* const __restrict __vectorcall		ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter);
+//extern ImagingSequence* const __restrict __vectorcall		ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter); // alternatively for sequences you can specify dimensions in ImagingLoadGIFSequence, which performs resampling to the desired dimensions aswell.
+void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im);	// (INPLACE) key[ 0x00b140 ] r g b
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im);
 void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src, float const tT); // im_dst = A, im_src = B, op: A = lerp(A, B, t)
 void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, ImagingMemoryInstance const* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT);
@@ -255,7 +256,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint
 
 // LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
-ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);
+ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);  // chroma-key[ 0x00b140 ] enabled internally  ** do not load multiple sequences at the same time in multiple threads - this is because of lockless file reading (optimization) **
 ImagingLUT* const __restrict __vectorcall			 ImagingLoadLUT(std::wstring_view const cubefilenamepath);
 
 #if INCLUDE_PNG_SUPPORT

@@ -14,18 +14,18 @@
 #include <tbb/scalable_allocator.h>
 
 struct filter {
-    double (*_filter)(double x);
-    double support;
+    double const (*_filter)(double x);
+    double const support;
 };
 
-static inline double box_filter(double x)
+static inline double const box_filter(double x)
 {
     if (x > -0.5 && x <= 0.5)
         return 1.0;
     return 0.0;
 }
 
-static inline double bilinear_filter(double x)
+static inline double const bilinear_filter(double x)
 {
     if (x < 0.0)
         x = -x;
@@ -34,7 +34,7 @@ static inline double bilinear_filter(double x)
     return 0.0;
 }
 
-static inline double hamming_filter(double x)
+static inline double const hamming_filter(double x)
 {
     if (x < 0.0)
         x = -x;
@@ -43,10 +43,10 @@ static inline double hamming_filter(double x)
     if (x >= 1.0)
         return 0.0;
     x = x * M_PI;
-    return sin(x) / x * (0.54f + 0.46f * cos(x));
+    return sin((float)x) / x * (0.54 + 0.46 * cos((float)x));
 }
 
-static inline double bicubic_filter(double x)
+static inline double const bicubic_filter(double x)
 {
     /* https://en.wikipedia.org/wiki/Bicubic_interpolation#Bicubic_convolution_algorithm */
 #define a -0.5
@@ -60,15 +60,15 @@ static inline double bicubic_filter(double x)
 #undef a
 }
 
-static inline double sinc_filter(double x)
+static inline double const sinc_filter(double x)
 {
     if (x == 0.0)
         return 1.0;
     x = x * M_PI;
-    return sin(x) / x;
+    return sin((float)x) / x;
 }
 
-static inline double lanczos_filter(double x)
+static inline double const lanczos_filter(double x)
 {
     /* truncated sinc */
     if (-3.0 <= x && x < 3.0)
@@ -76,12 +76,14 @@ static inline double lanczos_filter(double x)
     return 0.0;
 }
 
-static inline struct filter BOX = { box_filter, 0.5 };
-static inline struct filter BILINEAR = { bilinear_filter, 1.0 };
-static inline struct filter HAMMING = { hamming_filter, 1.0 };
-static inline struct filter BICUBIC = { bicubic_filter, 2.0 };
-static inline struct filter LANCZOS = { lanczos_filter, 3.0 };
+namespace { // local to this file only
 
+    constinit static inline struct filter BOX = { box_filter, 0.5 };
+    constinit static inline struct filter BILINEAR = { bilinear_filter, 1.0 };
+    constinit static inline struct filter HAMMING = { hamming_filter, 1.0 };
+    constinit static inline struct filter BICUBIC = { bicubic_filter, 2.0 };
+    constinit static inline struct filter LANCZOS = { lanczos_filter, 3.0 };
+} // end ns
 
 /* 8 bits for result. Filter can have negative areas.
    In one cases the sum of the coefficients will be negative,
@@ -93,47 +95,50 @@ static inline struct filter LANCZOS = { lanczos_filter, 3.0 };
 /* We use signed int16_t type to store coefficients. */
 #define MAX_COEFS_PRECISION (16 - 1)
 
-uint8_t _lookups[512] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-    32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-    48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
-    64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-    80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
-    96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
-    112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
-    128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
-    144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
-    160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
-    176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
-    192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
-    208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
-    224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
-    240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
-};
+namespace { // local to this file only
 
-uint8_t *lookups = &_lookups[128];
+    constinit static inline uint8_t const _lookups[512] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+        32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
+        64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+        80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+        96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
+        112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127,
+        128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
+        144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+        160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
+        176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
+        192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
+        208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
+        224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+        240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255
+    };
 
+    constinit static inline uint8_t const* const lookups = &_lookups[128];
+
+} // end ns
 
 static inline uint8_t clip8(int in, int precision)
 {
-    return lookups[in >> precision];
+    return(lookups[in >> precision]);
 }
 
 
@@ -423,7 +428,7 @@ ImagingResampleHorizontal_32bpc(ImagingMemoryInstance const* const __restrict im
 				ss = 0.0;
 				for (x = 0; x < xmax; x++)
 					ss += IMAGING_PIXEL_I(imIn, x + xmin, yy) * k[x];
-				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32(ss);
+				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32((float)ss);
 			}
 		}
 		break;
@@ -437,7 +442,7 @@ ImagingResampleHorizontal_32bpc(ImagingMemoryInstance const* const __restrict im
 				ss = 0.0;
 				for (x = 0; x < xmax; x++)
 					ss += IMAGING_PIXEL_F(imIn, x + xmin, yy) * k[x];
-				IMAGING_PIXEL_F(imOut, xx, yy) = ss;
+				IMAGING_PIXEL_F(imOut, xx, yy) = (float)ss;
 			}
 		}
 		break;
@@ -482,7 +487,7 @@ ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn
 				ss = 0.0;
 				for (y = 0; y < ymax; y++)
 					ss += IMAGING_PIXEL_I(imIn, xx, y + ymin) * k[y];
-				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32(ss);
+				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32((float)ss);
 			}
 		}
 		break;
@@ -496,7 +501,7 @@ ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn
 				ss = 0.0;
 				for (y = 0; y < ymax; y++)
 					ss += IMAGING_PIXEL_F(imIn, xx, y + ymin) * k[y];
-				IMAGING_PIXEL_F(imOut, xx, yy) = ss;
+				IMAGING_PIXEL_F(imOut, xx, yy) = (float)ss;
 			}
 		}
 		break;
@@ -563,31 +568,33 @@ ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xs
             );
     }
 
-    ImagingMemoryInstance const* imWork(imIn);
     Imaging imOut(nullptr);
 
     /* two-pass resize, first pass */
     if (imIn->xsize != xsize) {
-        imWork = ResampleHorizontal(imWork, xsize, filterp);
-        if ( !imWork)
+
+        imOut = ResampleHorizontal(imIn, xsize, filterp);
+        if (!imOut)
             return nullptr;
-        imOut = const_cast<ImagingMemoryInstance* __restrict&>(imWork);
     }
 
     /* second pass */
     if (imIn->ysize != ysize) {
+
+        ImagingMemoryInstance const* imTemp(imOut);
+
         /* imIn can be the original image or horizontally resampled one */
-        imOut = ResampleVertical(imWork, ysize, filterp);
-        /* it's safe to call ImagingDelete with empty value
-           if there was no previous step. */
-        ImagingDelete(imWork);
-        if ( ! imOut)
+        imOut = ResampleVertical((imOut ? imOut : imIn), ysize, filterp);
+        if (imTemp) {
+            ImagingDelete(imTemp); imTemp = nullptr;
+        }
+        if (!imOut)
             return nullptr;
     }
 
     /* if none of the previous steps are performed, image size is no different than source image*/
     if (!imOut) {
-        imOut = ImagingCopy(imWork);
+        imOut = ImagingCopy(imIn);
     }
 
     return imOut;

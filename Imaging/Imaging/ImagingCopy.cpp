@@ -460,6 +460,50 @@ ImagingCopy(ImagingLUT const* const __restrict lutIn)
 	return(_copy(lutIn));
 }
 
+
+void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im)	// (INPLACE) key[ 0x00b140 ] - for best results this function should be used earliest in the pipeline before any image alteration are made like dithering, etc.
+{																				//                           - this function specifies the exact color key to use, but compensates for +-1 in differences.
+	static constexpr uint32_t const color_key(0x0040b100);	// abgr
+
+	uint32_t const height(im->ysize);
+	uint32_t const width(im->xsize);
+
+	uint32_t* __restrict block(reinterpret_cast<uint32_t*>(im->block));
+	uvec4_t rgba{};
+	uvec4_v const color_key_comp(0x00, 0xb1, 0x40); // color key per-component
+
+	uint32_t count(im->xsize * im->ysize);
+	while (--count != 0) { // for every pixel in the image
+
+		// remove color & alpha component  (remove green screen color & set what ever alpha it was before, possibly opaque, to transparent)
+		
+		//                         //									  a r g b        a b g r
+		//if (*block == 0x00b140)  // a, b, g, r // r g b a backwards  [0x0000b140 --> 0x0040b100]
+		uint32_t const color_dont_care_alpha(*block & 0x00ffffff);
+
+		if (color_dont_care_alpha == color_key) // color key takes care of the swizzle mentioned above
+		{
+			*block = 0; // remove color & alpha component  (remove green screen color & set what ever alpha it was before, possibly opaque, to transparent)
+		}
+		else {
+
+			SFM::unpack_rgba(color_dont_care_alpha, rgba.r, rgba.g, rgba.b, rgba.a);
+			
+			// for colors close enough to color key (off by +-1 in any component)
+			if (uvec4_v::all<3>(color_key_comp == uvec4_v(rgba.r - 1, rgba.g, rgba.b, rgba.a)) || //	 uvec4_v::all(color_key_comp == uvec4_v(rgba.r + 1, rgba.g, rgba.b, rgba.a))  // exception r is zero for color key
+				uvec4_v::all<3>(color_key_comp == uvec4_v(rgba.r, rgba.g - 1, rgba.b, rgba.a)) ||
+				uvec4_v::all<3>(color_key_comp == uvec4_v(rgba.r, rgba.g + 1, rgba.b, rgba.a)) ||
+				uvec4_v::all<3>(color_key_comp == uvec4_v(rgba.r, rgba.g, rgba.b - 1, rgba.a)) ||
+				uvec4_v::all<3>(color_key_comp == uvec4_v(rgba.r, rgba.g, rgba.b + 1, rgba.a)))
+			{
+				*block = 0;
+			}
+		}
+
+		++block;
+	}
+}
+
 namespace dithering {
 	XMGLOBALCONST inline uint32_t const _n255by15{ (255U / 15U) };
 	XMGLOBALCONST inline uint32_t const _table[64]{ 
@@ -869,6 +913,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring
 }
 #endif
 
+/*
 ImagingSequence* const __restrict __vectorcall
 ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter)
 {
@@ -877,7 +922,7 @@ ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, i
 	imOut = (ImagingSequence*)scalable_malloc(1 * sizeof(ImagingSequence));
 	memset(&(*imOut), 0, sizeof(ImagingSequence));
 
-	/* Setup ouput image descriptor */
+	// Setup ouput image descriptor //
 	uint32_t const count(imIn->count);
 	imOut->count = count;
 	imOut->xsize = xsize;
@@ -948,6 +993,7 @@ ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, i
 
 	return(imOut);
 }
+*/
 
 enum GIFConstants {
 	    //Graphics control extension has most of animation info
@@ -966,7 +1012,7 @@ enum GIFConstants {
 
 typedef struct FrameHistory
 {
-	Imaging			 image = nullptr;
+	ImagingMemoryInstance const*			 image = nullptr;
 
 } FrameHistory;
 
@@ -1057,7 +1103,7 @@ static ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadGIFFrame(
 		meta.mode = ((ext->Bytes[GCE_Flags] >> 2) & 7);
 
 		meta.delay = frame_delay((uint8_t const* const)&ext->Bytes[GCE_Delay]);
-		if (meta.delay == 0)
+		if (0 == meta.delay)
 			meta.delay = 1;
 	}
 	meta_data_image.delay = meta.delay; // for the output images, only the delay is needed, everything else is "pre-processed"
@@ -1076,7 +1122,7 @@ static ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadGIFFrame(
 	switch (meta.mode)
 	{
 /*3*/case GCE_DisposalPrevious: //- don't do anything and the last frame will just repeat (ImageBlend - dst all transparent, src will replace)
-		bBlend = true;
+		bBlend = (0 != frame);
 		break;
 /*0*/case GCE_DisposalUnspecified: // -all pixels are replaced regardless of transparency
 		ImagingGIFSetPixels<true>(colormap->Colors, returnL, image);
@@ -1092,12 +1138,12 @@ static ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadGIFFrame(
 		else {
 			ImagingGIFSetPixels<true>(colormap->Colors, returnL, image);
 		}
-		if (0 != frame) {
-			bBlend = true;
-		}
+		bBlend = (0 != frame);
 		break;
-	
 	}
+
+	// apply chroma key filter 1st
+	ImagingChromaKey(returnL); // must be applied here, to the raw'ist of data before it becomes blended, dithered, etc.
 
 	if (bBlend) {
 
@@ -1168,9 +1214,9 @@ ImagingSequence* const __restrict __vectorcall ImagingLoadGIFSequence(std::wstri
 
 			// if zero is passed in for either width or height, default to the native corresponding dimension
 			if ( 0 == width )
-				width = im->xsize - 1;
+				width = im->xsize;
 			if ( 0 == height )
-				height = im->ysize - 1;
+				height = im->ysize;
 
 			im->destroy = static_cast<void(*)(ImagingSequence* const __restrict)>(&ImagingDestroyBlock_Sequence);
 
@@ -1213,7 +1259,7 @@ ImagingSequence* const __restrict __vectorcall ImagingLoadGIFSequence(std::wstri
 			im->ysize = height;
 
 			uint32_t const linesize(width * im->pixelsize),
-							 imagesize(height*linesize);
+						   imagesize(height * linesize);
 
 			im->linesize = linesize;
 
@@ -1244,6 +1290,7 @@ ImagingSequence* const __restrict __vectorcall ImagingLoadGIFSequence(std::wstri
 
 	return(im);
 }
+
 
 ImagingLUT* const __restrict __vectorcall ImagingLoadLUT(std::wstring_view const cubefilenamepath)
 {
