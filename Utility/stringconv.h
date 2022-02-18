@@ -65,19 +65,21 @@ namespace stringconv
 	}
 
 	STATIC_INLINE_PURE char const toLower(char const c) { // speedy variant for ascii characters only
-		return(('A' <= c && c <= 'Z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+		//return(('A' <= c && c <= 'Z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+		return(tolower(c));
 	}
 	STATIC_INLINE_PURE char const toUpper(char const c) { // speedy variant for ascii characters only
-		return(('a' <= c && c <= 'z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+		//return(('a' <= c && c <= 'z') ? c ^ ' ' : c);    // ^ autovectorizes to PXOR: runs on more ports than paddb
+		return(toupper(c));
 	}
 	inline std::wstring const& toLower(std::wstring& rsIn)
 	{
-		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), tolower);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), towlower);
 		return(rsIn);
 	}
 	inline std::wstring const& toUpper(std::wstring& rsIn)
 	{
-		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), towupper);
 		return(rsIn);
 	}
 	inline std::string const& toLower(std::string& rsIn)
@@ -87,6 +89,18 @@ namespace stringconv
 	}
 	inline std::string const& toUpper(std::string& rsIn)
 	{
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
+		return(rsIn);
+	}
+	inline std::string const toLower(std::string_view const sIn)
+	{
+		std::string rsIn(sIn);
+		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), tolower);
+		return(rsIn);
+	}
+	inline std::string const toUpper(std::string_view const sIn)
+	{
+		std::string rsIn(sIn);
 		std::transform(rsIn.begin(), rsIn.end(), rsIn.begin(), toupper);
 		return(rsIn);
 	}
