@@ -274,6 +274,13 @@ public:
 #endif
 		return(false); // task is finished
 	}
+	template<thread_id_t const thread>  // returns true when task is pending or active, false if finished or does not exist
+	static inline bool const test(task_id_t const task, [[maybe_unused]] std::string_view const context) { // shortcut to test-only 
+#if defined(NDEBUG)
+		(void)context; // unused
+#endif
+		return(wait<thread, true>(task, context));
+	}
 	static bool const initialize(unsigned long const (&cores)[2], uint32_t const thread_stack_size = 0); // must be called once when appropriate at program start-up
 	static void cancel_all();
 	static bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX) );  // optional timeout parameter - default is infinite, 0 would simply return if a wait is needed, all other alues are milliseconds
@@ -391,19 +398,19 @@ inline void async_long_task::process_async_queue(tbb::concurrent_queue< internal
 			task_id_t const task(work->id());
 			async_long_task::_current_task[thread] = task;
 
-			if constexpr (background_critical == thread) {
+			//if constexpr (background_critical == thread) {
 
 				work->execute();
 
-			}
-			else {
-				SetThreadPriority(_hThread[thread], THREAD_MODE_BACKGROUND_BEGIN);
+			//}
+			//else {
+				//SetThreadPriority(_hThread[thread], THREAD_MODE_BACKGROUND_BEGIN); // this really slows down the background processing so it has been disabled. Only to be re-enabled if performance problems arise. (all commented out code here)
 				
 				// tbb should not be used in background tasks, or at least limited to 1 thread, being this background thread
-				work->execute();
+				//work->execute();
 
-				SetThreadPriority(_hThread[thread], THREAD_MODE_BACKGROUND_END);
-			}
+				//SetThreadPriority(_hThread[thread], THREAD_MODE_BACKGROUND_END);
+			//}
 			
 			record_task_id<thread>(task);
 			async_long_task::_current_task[thread] = 0;
