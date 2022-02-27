@@ -531,7 +531,8 @@ void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 	// init step 0b
 	oRandom.Initialized = true; // set first so we prevent recursive initialization!
 	// init step 1
-	SetSeed((int64_t)oRandom.reservedSeed);
+	oRandom.hashSeed = oRandom.reservedSeed;
+	SetXorShiftState(oRandom.reservedSeed);
 	oRandom.reserved_xorshift_state = oRandom.xorshift_state;  // only place should reserved_xorshift_state ever be "set"
 	// init step 2
 	oRandom.hashSeed = oRandom.reservedSeed; // after the next step the xorshift state will be synchronized.

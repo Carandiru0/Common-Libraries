@@ -514,6 +514,7 @@ bool const async_long_task::wait_for_all(milliseconds const timeout)
 		}
 	}
 
+
 	return(bWaitState);
 }
 

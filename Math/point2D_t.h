@@ -278,10 +278,9 @@ STATIC_INLINE_PURE rect2D_t const XM_CALLCONV v4_to_r2D(FXMVECTOR const v) {	// 
 STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV r2D_to_v4(rect2D_t const v) {
 	return(_mm_cvtepi32_ps(v.v));
 }
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV r2D_to_nk_rect(rect2D_t const v) {
-	
-	rect2D_t const tmpRect(r2D_set_by_width_height(v.left_top(), v.width_height()));
-	return(_mm_cvtepi32_ps(tmpRect.v));
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV r2D_to_nk_rect(rect2D_t const v) {	
+	// nk_rect is x,y,width,height vs rect2D_t x0,y0,x1,y1
+	return(uvec4_v(v.left, v.top, v.width(), v.height()).v4f());
 }
 
 template<bool const grow_left_top = true, bool const grow_right_bottom = true>
