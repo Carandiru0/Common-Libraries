@@ -59,35 +59,7 @@ INLINE_MEMFUNC __streaming_store_fence()
 
 // [clears]] //
 
-template<> // aligned to 16 bytes specialization
-INLINE_MEMFUNC __memclr_stream<16>(void* const __restrict dest, size_t bytes)
-{
-	static constexpr size_t const element_size = sizeof(__m128i);
-
-	alignas(16) uint8_t* __restrict d((uint8_t * __restrict)std::assume_aligned<16>(dest));
-
-	__m128i const xmZero(_mm_setzero_si128());
-
-	// 32 bytes / iteration
-#pragma loop( ivdep )
-	for (; bytes >= CACHE_LINE_BYTES; bytes -= (CACHE_LINE_BYTES >> 1)) {
-		// expolit both integer and floating point "uop ports"
-		_mm_stream_si128((__m128i* __restrict)d, xmZero);
-		_mm_stream_ps((float* const __restrict)(((__m128*)d) + 1), _mm_castsi128_ps(xmZero));
-
-		d += (CACHE_LINE_BYTES >> 1);
-	}
-
-	// 16 bytes / iteration
-#pragma loop( ivdep )
-	for (; bytes >= element_size; bytes -= element_size) {
-
-		_mm_stream_si128((__m128i* __restrict)d, xmZero);
-
-		d += element_size;
-	}
-}
-template<size_t const alignment> // any other alignment greater than 16
+template<size_t const alignment>
 INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 {
 	static constexpr size_t const element_size = sizeof(__m256i);
@@ -125,35 +97,7 @@ INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes)
 	}
 }
 
-template<> // aligned to 16 bytes specialization
-INLINE_MEMFUNC __memset_stream<16>(void* const __restrict dest, int const value, size_t bytes)
-{
-	static constexpr size_t const element_size = sizeof(__m128i);
-
-	alignas(16) uint8_t* __restrict d((uint8_t * __restrict)std::assume_aligned<16>(dest));
-
-	__m128i const xmValue(_mm_set1_epi32(value));
-
-	// 32 bytes / iteration
-#pragma loop( ivdep )
-	for (; bytes >= CACHE_LINE_BYTES; bytes -= (CACHE_LINE_BYTES >> 1)) {
-		// expolit both integer and floating point "uop ports"
-		_mm_stream_si128((__m128i* __restrict)d, xmValue);
-		_mm_stream_ps((float* const __restrict)(((__m128*)d) + 1), _mm_castsi128_ps(xmValue));
-
-		d += (CACHE_LINE_BYTES >> 1);
-	}
-
-	// 16 bytes / iteration
-#pragma loop( ivdep )
-	for (; bytes >= element_size; bytes -= element_size) {
-
-		_mm_stream_si128((__m128i* __restrict)d, xmValue);
-
-		d += element_size;
-	}
-}
-template<size_t const alignment> // any other alignment greater than 16
+template<size_t const alignment>
 INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, size_t bytes)
 {
 	static constexpr size_t const element_size = sizeof(__m256i);
@@ -194,8 +138,8 @@ INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, siz
 namespace internal_mem
 {
 	static constexpr size_t const _cache_size = MINIMUM_PAGE_SIZE;
-
-	constinit extern __declspec(selectany) inline thread_local alignas(32) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
+																// *bugfix - do not move this alignas(). corrupted compilation with strange memory issue where loading a new model has "holes". if you move it to the beginning of the line it does this!!
+	constinit extern __declspec(selectany) inline thread_local alignas(CACHE_LINE_BYTES) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
 
 	// *internal only to be used with _streaming_cache as dest.
 	template<size_t const alignment>

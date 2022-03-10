@@ -406,6 +406,19 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		__m128 const c = _mm_sqrt_ss(_mm_sub_ss(two, a));
 		return (_mm_cvtss_f32(_mm_fmsub_ss(_mm_set_ss(_term0), c, b)));
 	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall __acos_approx(FXMVECTOR const A) // faster acos, with 0.07f degrees maximum error
+	{
+		constexpr float const _term0 = 8.0f / 3.0f;
+		constexpr float const _term1 = 1.0f / 3.0f;
+
+		// 8500ns, 0.06 degree error
+		__m128 const two = _mm_set_ps1(2.0f);
+
+		__m128 const a = _mm_sqrt_ps(_mm_fmadd_ps(A, two, two));
+		__m128 const b = _mm_mul_ps(_mm_sqrt_ps(_mm_fnmadd_ps(A, two, two)), _mm_set_ps1(_term1));
+		__m128 const c = _mm_sqrt_ps(_mm_sub_ps(two, a));
+		return (_mm_fmsub_ps(_mm_set_ps1(_term0), c, b));
+	}
 
 	// sincos SVML
 	STATIC_INLINE_PURE float const __vectorcall sincos(float* const __restrict c, float const A) 
