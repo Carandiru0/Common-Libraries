@@ -27,6 +27,10 @@ static constexpr size_t const MINIMUM_PAGE_SIZE = 4096ull; // Windows Only, cann
 // [fences] //
 INLINE_MEMFUNC __streaming_store_fence();
 
+// *** not faster than the intrinsic memset() - depends on usage. good for situations where the cache is kept clean while operating on memory with non-temporal loads & stores *** can be faster than intrinsic memset in some situations
+// IF IN DOUBT, USE THE INTRINSIC MEMSET AND MEMCPY routines
+// *** specific usage only ***
+
 // [clears]
 /* use native intrinsic memset() for unaligned data, otherwise __memclr_stream & __memset_strean are better */
 template<size_t const alignment>

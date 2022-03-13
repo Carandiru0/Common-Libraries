@@ -58,7 +58,7 @@ public:
 		tbb::cache_aligned_allocator< bit_volume<Width, Height, Depth> > allocator;
 		bit_volume<Width, Height, Depth>* const __restrict pReturn(static_cast<bit_volume<Width, Height, Depth>*const __restrict>(allocator.allocate(1)));
 
-		__memclr_stream<CACHE_LINE_BYTES>(pReturn, sizeof(bit_volume<Width, Height, Depth>));
+		pReturn->clear();
 
 		return(pReturn);
 	}
@@ -143,12 +143,5 @@ bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const x, si
 template<size_t const Width, size_t const Height, size_t const Depth>
 void bit_volume<Width, Height, Depth>::clear()
 {
-	__m256i const xmZero(_mm256_setzero_si256());
-
-	for (size_t bits = 0; bits < (Width * Height * Depth); bits += 256) { // by total bits (length), 256 bits / iteration
-
-		size_t const block(bits >> element_bits);	// 4 elements per 256 bits
-
-		_mm256_store_si256((__m256i* const __restrict)(_bits + block), xmZero);
-	}
+	memset(_bits, 0, size());
 }
