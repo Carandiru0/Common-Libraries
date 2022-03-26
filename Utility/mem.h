@@ -143,7 +143,7 @@ namespace internal_mem
 {
 	static constexpr size_t const _cache_size = MINIMUM_PAGE_SIZE;
 																// *bugfix - do not move this alignas(). corrupted compilation with strange memory issue where loading a new model has "holes". if you move it to the beginning of the line it does this!!
-	constinit extern __declspec(selectany) inline thread_local alignas(CACHE_LINE_BYTES) uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
+	alignas(CACHE_LINE_BYTES) constinit extern __declspec(selectany) inline thread_local uint8_t _streaming_cache[_cache_size]{};	// 4KB reserved/thread
 
 	// *internal only to be used with _streaming_cache as dest.
 	template<size_t const alignment>
