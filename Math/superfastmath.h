@@ -1090,9 +1090,9 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return((uint8_t const)(((bits * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32));		// requires 64bit compiler and processor
 	}
 
-	// special fast round up for multiples known - only works with ***even multiple numbers*** 
+	// ***even multiples only, signed only*** 
 	template<bool const bRoundUp>
-	STATIC_INLINE_PURE int64_t const roundToMultipleOf(int64_t const n, int64_t const multiple)  // signed integers only 
+	STATIC_INLINE_PURE int64_t const roundToMultipleOf(int64_t const n, int64_t const multiple) 
 	{
 		if constexpr(bRoundUp) {
 			return((n + (multiple - 1)) & (-multiple));		// add seven then round down to the closest multiple of 8
@@ -1101,8 +1101,9 @@ namespace SFM	// (s)uper (f)ast (m)ath
 			return(n & (-multiple));						// just the negative and trick for rounding down
 		}
 	}
+	// ***even multiples only, signed only*** 
 	template<bool const bRoundUp>
-	STATIC_INLINE_PURE int32_t const roundToMultipleOf(int32_t const n, int32_t const multiple)  // signed integers only 
+	STATIC_INLINE_PURE int32_t const roundToMultipleOf(int32_t const n, int32_t const multiple)
 	{
 		if constexpr (bRoundUp) {
 			return((n + (multiple - 1)) & (-multiple));		// add seven then round down to the closest multiple of 8
@@ -1111,6 +1112,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 			return(n & (-multiple));						// just the negative and trick for rounding down
 		}
 	}
+	// ***odd/even multiples, unsigned or signed*** 
 	template<typename T>
 	STATIC_INLINE_PURE T const __vectorcall roundToNearestMultipleOf(T const n, T const multiple)  // unsigned or signed allowed
 	{

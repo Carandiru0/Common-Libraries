@@ -42,20 +42,20 @@ typedef union alignas(16) point2D
 		//return(_mm_testz_si128(v,v)); // this tests x,y,z,w which is no good - can't rely on z,w values 
 		return(!(x | y)); // must only test x,y and exclude z,w padding
 	}
-	__forceinline __vectorcall point2D(int32_t const x0y0) : v(_mm_set_epi32(0, 0, x0y0, x0y0))
+	__forceinline __vectorcall point2D(int32_t const x0y0) : v(_mm_set_epi32(1, 1, x0y0, x0y0)) // *bugfix - must initialize z,w to 1,1 to avoid division by zero in vectorized code
 	{}
-	__forceinline __vectorcall point2D(uint32_t const x0y0) : v(_mm_set_epi32(0, 0, x0y0, x0y0))
+	__forceinline __vectorcall point2D(uint32_t const x0y0) : v(_mm_set_epi32(1, 1, x0y0, x0y0))
 	{}
-	__forceinline __vectorcall point2D(int32_t const x0, int32_t const y0) : v(_mm_set_epi32(0, 0, y0, x0))
+	__forceinline __vectorcall point2D(int32_t const x0, int32_t const y0) : v(_mm_set_epi32(1, 1, y0, x0))
 	{}
-	__forceinline __vectorcall point2D(int64_t const x0, int64_t const y0) : v(_mm_set_epi32(0, 0, (int32_t)y0, (int32_t)x0))  // only need 32bits
+	__forceinline __vectorcall point2D(int64_t const x0, int64_t const y0) : v(_mm_set_epi32(1, 1, (int32_t)y0, (int32_t)x0))  // only need 32bits
 	{}
-	__forceinline __vectorcall point2D(uint32_t const x0, uint32_t const y0) : v(_mm_set_epi32(0, 0, y0, x0))
+	__forceinline __vectorcall point2D(uint32_t const x0, uint32_t const y0) : v(_mm_set_epi32(1, 1, y0, x0))
 	{}
-	__forceinline __vectorcall point2D(size_t const x0, size_t const y0) : v(_mm_set_epi32(0, 0, (uint32_t)y0, (uint32_t)x0))   // only need 32bits
+	__forceinline __vectorcall point2D(size_t const x0, size_t const y0) : v(_mm_set_epi32(1, 1, (uint32_t)y0, (uint32_t)x0))   // only need 32bits
 	{}
 	// conversion from float to int defaults to floor, same as v2_to_p2D. If rounding is desired(rarely) use default ctor with v2_to_p2D_rounded instead
-	__forceinline __vectorcall point2D(float const x0, float const y0) : v(_mm_cvtps_epi32(_mm_round_ps(_mm_set_ps(0.0f, 0.0f, y0, x0), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)))  // floor(v)
+	__forceinline __vectorcall point2D(float const x0, float const y0) : v(_mm_cvtps_epi32(_mm_round_ps(_mm_set_ps(1.0f, 1.0f, y0, x0), _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)))  // floor(v)
 	{}
 	__forceinline explicit __vectorcall point2D(__m128i const vSrc) : v(vSrc)
 	{}

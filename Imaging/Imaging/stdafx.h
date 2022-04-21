@@ -21,23 +21,7 @@
 #define _USE_MATH_DEFINES
 #include <Math/superfastmath.h>
 
-#define __TBB_USE_PROPORTIONAL_SPLIT_IN_BLOCKED_RANGES 0
-
-#include <tbb/tbb_stddef.h>
-#include <tbb/task_scheduler_init.h>
-#include <tbb/atomic.h>
-#include <tbb/scalable_allocator.h>
-#include <tbb/spin_rw_mutex.h>
-#include <tbb/queuing_rw_mutex.h>
-#include <tbb/enumerable_thread_specific.h>
-#include <tbb/blocked_range2d.h>
-#include <tbb/parallel_for.h>
-#include <tbb/parallel_sort.h>
-#include <tbb/parallel_invoke.h>
-#include <tbb/task_group.h>
-#include <tbb/concurrent_vector.h>
-#include <tbb/concurrent_queue.h>
-#include <tbb/concurrent_unordered_map.h>
+#include <tbb/tbb.h>
 
 // reference additional headers your program requires here
 #if INCLUDE_JPEG_SUPPORT
