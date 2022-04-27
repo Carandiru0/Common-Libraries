@@ -137,7 +137,7 @@ bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const index
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const x, size_t const y, size_t const z, bool const state)
 {
-	write_bit(get_index(x, y, z));
+	write_bit(get_index(x, y, z), state);
 }
 
 template<size_t const Width, size_t const Height, size_t const Depth>

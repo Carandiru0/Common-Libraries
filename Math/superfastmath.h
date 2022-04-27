@@ -1376,7 +1376,7 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 #define SRGB_to_FLOAT SFM::XMColorSRGBToRGB
 
-	STATIC_INLINE_PURE uint32_t const srgb_to_linear_rgba(uint32_t const packed)
+	STATIC_INLINE_PURE uint32_t const srgb_to_linear_rgba(uint32_t const packed) // there is a faster function that uses a lookup table in Imaging.
 	{
 		uvec4_t rgba;
 		SFM::unpack_rgba(packed, rgba);
@@ -1659,6 +1659,13 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(XMVectorSelect( g_XMZero, mat.r[3], g_XMSelect1110 ));
 	}
 
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall WorldToScreen(FXMVECTOR const worldPt, FXMVECTOR const frameBufferSize, FXMMATRIX const viewProj)
+	{
+		XMVECTOR const screenPt(XMVector3TransformCoord(worldPt, viewProj));
+		XMVECTOR const halfFrameBufferSize(XMVectorScale(frameBufferSize, 0.5f));
+		
+		return(SFM::__fma(screenPt, halfFrameBufferSize, halfFrameBufferSize));
+	}
 	/* this is strange should work but doesn't check w/stackoverflow.com!
 	// fastest way to replace a column in XMMATRIX (which is row major)
 	#define REPLACE_COLUMN(m, v, s) \
