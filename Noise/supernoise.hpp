@@ -104,8 +104,8 @@ namespace supernoise
 		{
 			// x - y * floor(x/y) = m
 			//t = -fmodf(t * 0.2f,2.0f); // noise amount ***** ACKK!!!
-			float const x(t * 0.2f);
-			t = -(x - 2.0f * SFM::floor(x*0.5f)); // avoid 14cycle div cost + function overhead of fmodf c lib
+			//float const x(t * 0.2f);
+			//t = -(x - 2.0f * SFM::floor(x*0.5f)); // avoid 14cycle div cost + function overhead of fmodf c lib
 		}
 
 		float iter(2.0f);
@@ -136,9 +136,9 @@ namespace supernoise
 #ifdef NOISE_IMPLEMENTATION
 extern int32_t const PsuedoRandomNumber16(int32_t const iMin, int32_t const iMax);
 
-static uint8_t PerlinPermutationsDefaultNativeData[supernoise::PERMUTATION_STORAGE_SIZE];
+constinit static inline uint8_t PerlinPermutationsDefaultNativeData[supernoise::PERMUTATION_STORAGE_SIZE]{};
 
-static uint8_t const* __restrict PerlinPermutations;				// pointerto current dataset of permutations
+constinit static inline uint8_t const* __restrict PerlinPermutations{};				// pointerto current dataset of permutations
 
 #define noise_lerp(t, a, b) SFM::lerp((float)a,(float)b,(float)t) // reorders parameters correctly
 
