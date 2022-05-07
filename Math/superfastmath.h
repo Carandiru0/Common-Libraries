@@ -54,7 +54,7 @@ using namespace DirectX;
 		[-]		[-]		[-]		[-]
 */
 
-#ifndef SFM_NO_OVERRIDES
+#ifndef SFM_NO_OVERRIDES	// for remapping, globally, certain common math functions to use the superfastmath version override instead. If conflicts arise, define SFM_NO_OVERRIDES before including this header file.
 
 #ifdef fma
 #undef fma
@@ -77,17 +77,17 @@ using namespace DirectX;
 #define fmsf SFM::__fms
 #endif
 
-#ifdef sqrt
-#undef sqrt
-#define sqrt SFM::__sqrt
-#endif
+//#ifdef sqrt CONFLICTS WITH STD, <RANDOM>
+//#undef sqrt
+//#define sqrt SFM::__sqrt
+//#endif
 #ifdef sqrtf
 #undef sqrtf
 #define sqrtf SFM::__sqrt
 #endif
-#ifndef sqrt
-#define sqrt SFM::__sqrt
-#endif
+//#ifndef sqrt CONFLICTS WITH STD, <RANDOM>
+//#define sqrt SFM::__sqrt
+//#endif
 #ifndef sqrtf
 #define sqrtf SFM::__sqrt
 #endif
@@ -175,9 +175,9 @@ using namespace DirectX;
 #ifndef logf
 #define logf SFM::__log
 #endif
-#ifndef pow
-#define pow SFM::__pow
-#endif
+//#ifndef pow CONFLICTS WITH STD, <RANDOM>
+//#define pow SFM::__pow
+//#endif
 #ifndef powf
 #define powf SFM::__pow
 #endif
