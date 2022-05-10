@@ -57,30 +57,42 @@ template<
     typename = typename std::enable_if<
         std::is_same<typename char_type<String>::type, char>::value
     >::type
-> file_handle_type open_file_helper(const String& path, const access_mode mode)
+> file_handle_type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
-    return ::CreateFileA(c_str(path),
-            mode == access_mode::read ? GENERIC_READ : GENERIC_READ | GENERIC_WRITE,
+    auto const handle = ::CreateFileA(c_str(path),
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             0,
             OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
+            (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
             0);
+	
+    if (temporary) { // *bugfix set attributes on temporary files again
+        SetFileAttributes(c_str(path), (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)));
+    }
+
+    return(handle);
 }
 
 template<typename String>
 typename std::enable_if<
     std::is_same<typename char_type<String>::type, wchar_t>::value,
     file_handle_type
->::type open_file_helper(const String& path, const access_mode mode)
+>::type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
-    return ::CreateFileW(c_str(path),
-            mode == access_mode::read ? GENERIC_READ : GENERIC_READ | GENERIC_WRITE,
+    auto const handle = ::CreateFileW(c_str(path),
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             0,
             OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
+            (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
             0);
+	
+    if (temporary) { // *bugfix set attributes on temporary files again
+        SetFileAttributes(c_str(path), (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)));
+    }
+
+    return(handle);
 }
 
 } // win
@@ -102,7 +114,7 @@ inline std::error_code last_error() noexcept
 }
 
 template<typename String>
-file_handle_type open_file(const String& path, const access_mode mode,
+file_handle_type open_file(const String& path, const access_mode mode, bool const temporary,
         std::error_code& error)
 {
     error.clear();
@@ -112,7 +124,7 @@ file_handle_type open_file(const String& path, const access_mode mode,
         return invalid_handle;
     }
 #ifdef _WIN32
-    const auto handle = win::open_file_helper(path, mode);
+    const auto handle = win::open_file_helper(path, mode, temporary);
 #else // POSIX
     const auto handle = ::open(c_str(path),
             mode == access_mode::read ? O_RDONLY : O_RDWR);
@@ -285,7 +297,7 @@ basic_mmap<AccessMode, ByteT>::mapping_handle() const noexcept
 template<access_mode AccessMode, typename ByteT>
 template<typename String>
 void basic_mmap<AccessMode, ByteT>::map(const String& path, const size_type offset,
-        const size_type length, std::error_code& error)
+        const size_type length, bool const temporary, std::error_code& error)
 {
     error.clear();
     if(detail::empty(path))
@@ -293,7 +305,7 @@ void basic_mmap<AccessMode, ByteT>::map(const String& path, const size_type offs
         error = std::make_error_code(std::errc::invalid_argument);
         return;
     }
-    const auto handle = detail::open_file(path, AccessMode, error);
+    const auto handle = detail::open_file(path, AccessMode, temporary, error);
     if(error)
     {
         return;

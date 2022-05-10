@@ -1206,6 +1206,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
 	}
+	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128i const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
+	{
+		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
+	}
 	STATIC_INLINE_PURE void __vectorcall saturate_to_u16(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
 	{
 		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u16(xmVectorColor));
@@ -1427,7 +1431,12 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(XMVectorGetX(XMVector3Dot(_Luminance, linear)));
 	}
-
+	STATIC_INLINE_PURE float const __vectorcall luminance(uvec4_v const packed) // assumes color is in linear space
+	{
+		static constexpr float const NORMALIZE = 1.0f / float(UINT8_MAX);
+		return(XMColorRGBToLuminance(XMVectorScale(packed.v4f(), NORMALIZE)));
+	}
+	
 	// OKLAB colorspace
 	/* https://www.shadertoy.com/view/ttcyRS w/updated values
 	vec3 oklab_mix( vec3 colA, vec3 colB, float h )

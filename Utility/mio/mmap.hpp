@@ -273,7 +273,7 @@ public:
      */
     template<typename String>
     void map(const String& path, const size_type offset,
-            const size_type length, std::error_code& error);
+            const size_type length, bool const temporary, std::error_code& error);
 
     /**
      * Establishes a memory mapping with AccessMode. If the mapping is unsuccesful, the
@@ -436,10 +436,10 @@ template<
     typename MMap,
     typename MappingToken
 > MMap make_mmap(const MappingToken& token,
-        int64_t offset, int64_t length, std::error_code& error)
+        int64_t offset, int64_t length, bool const temporary, std::error_code& error)
 {
     MMap mmap;
-    mmap.map(token, offset, length, error);
+    mmap.map(token, offset, length, temporary, error);
     return mmap;
 }
 
@@ -452,15 +452,15 @@ template<
  */
 template<typename MappingToken>
 mmap_source make_mmap_source(const MappingToken& token, mmap_source::size_type offset,
-        mmap_source::size_type length, std::error_code& error)
+        mmap_source::size_type length, bool const temporary, std::error_code& error)
 {
-    return make_mmap<mmap_source>(token, offset, length, error);
+    return make_mmap<mmap_source>(token, offset, length, temporary, error);
 }
 
 template<typename MappingToken>
-mmap_source make_mmap_source(const MappingToken& token, std::error_code& error)
+mmap_source make_mmap_source(const MappingToken& token, bool const temporary, std::error_code& error)
 {
-    return make_mmap_source(token, 0, map_entire_file, error);
+    return make_mmap_source(token, 0, map_entire_file, temporary, error);
 }
 
 /**
