@@ -25,6 +25,7 @@ eg.) in rng.c file:                                       *(only one C file)
 //
 // note: You do *not* have to reset seed!
 //
+
 #ifndef DETERMINISTIC_KEY_SEED
 #define RANDOM_KEY_SEED 1
 #define DETERMINISTIC_KEY_SEED 0
@@ -32,7 +33,11 @@ eg.) in rng.c file:                                       *(only one C file)
 #define RANDOM_KEY_SEED 0
 #endif
 
-void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
+#ifndef NO_INLINE
+#define NO_INLINE __declspec(noinline)
+#endif
+
+NO_INLINE void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
 uint64_t const GetSecureSeed();
 void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Hash & Psuedo RNG functions *only*
 void SetSeed(int32_t Seed); // 32 bit seeds are ok, but 64 bit seeds are better
@@ -44,7 +49,7 @@ int32_t const PsuedoRandomNumber32(int32_t const iMin = 0, int32_t const iMax = 
 int32_t const PsuedoRandomNumber16(int32_t const iMin = 0, int32_t const iMax = INT16_MAX); // inclusive " ""  " ""
 bool const PsuedoRandom5050(void);
 
-#define PsuedoRandomNumber PsuedoRandomNumber32	// default
+#define PsuedoRandomNumber PsuedoRandomNumber64	// default
 
 
 // These are hashing 64bit & 32bit values directly, deterministic by using SetSeed()
@@ -189,7 +194,7 @@ constinit static inline Random oRandomMaster{};
 
 constinit thread_local static Random oRandom{}; // thread local randoms that mirror the oRandomMaster configuration
 
-static void InitializeRandomNumberGeneratorInstance(); // forward declaration
+NO_INLINE static void InitializeRandomNumberGeneratorInstance(); // forward declaration
 
 // ** xxHash ** Function https://blogs.unity3d.com/2015/01/07/a-primer-on-repeatable-random-numbers/
 // SIMD optimized variant for usage on 4 numbers simultaneously to speed up PsuedoSetSeed()
@@ -270,7 +275,7 @@ STATIC_INLINE_PURE uint128_t const _mul128(uint64_t const a_lo, uint64_t const b
 	return { {lolo, lolo_high} };
 }
 #endif
-STATIC_INLINE_PURE uint64_t const RandomNumber_Limit_64(uint64_t const xrandx, uint64_t const uiMax) { // 1 to UINT32_MAX
+STATIC_INLINE_PURE uint64_t const RandomNumber_Limit_64(uint64_t const xrandx, uint64_t const uiMax) { // 1 to UINT64_MAX
 	return((uint64_t)(_mul128(xrandx, uiMax).u64[1])); // same as shift down 64 bits, by just selecting the upper 64bits 
 }
 #ifdef uint128_t
@@ -328,7 +333,7 @@ int32_t const PsuedoRandomNumber16(int32_t const iMin, int32_t const iMax)
 }
 bool const PsuedoRandom5050(void)
 {
-	return(PsuedoRandomNumber32(INT32_MIN, INT32_MAX) < 0);
+	return(PsuedoRandomNumber64(INT64_MIN, INT64_MAX) < 0);
 }
 // deprecated functions PsuedoRandomNumber32, PsuedoRandomNumber8 left for compatability
 /*DECLSPEC_DEPRECATED
@@ -436,7 +441,7 @@ void SetSeed(int32_t Seed)
 }
 // private for init only  //
 // private for init only  //
-static void InitializeRandomNumberGeneratorInstance()
+NO_INLINE static void InitializeRandomNumberGeneratorInstance()
 {
 	// step 0 - *important copy from the master initialized instance*  [thread local] = [master]
 	oRandom = oRandomMaster; // copy starting state (synchronize) //
@@ -456,7 +461,7 @@ static void PsuedoResetSeed()
 }
 
 // Only call this function ONCE!!! -or- Only call this function to load a NEW SEED.
-void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
+NO_INLINE void InitializeRandomNumberGenerators(uint64_t const deterministic_seed)
 {
 	// init step 0a
 	oRandom.xorshift_state = { _mm256_set_epi64x(XORSHIFT_STATE_RESET[0], XORSHIFT_STATE_RESET[1], XORSHIFT_STATE_RESET[2], XORSHIFT_STATE_RESET[3]) };  // psuedo rng seeds must be non zero

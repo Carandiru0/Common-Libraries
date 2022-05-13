@@ -31,7 +31,11 @@ struct no_vtable bit_volume
 	static constexpr size_t const stride = { (Width * Height * Depth) / element_count };	// number of blocks for each dimension
 
 public:
-	__forceinline size_t const			  get_index(size_t const x, size_t const y, size_t const z) const;
+	static constexpr size_t const width() { return(Width); }
+	static constexpr size_t const height() { return(Height); }
+	static constexpr size_t const depth() { return(Depth); }
+	
+	__forceinline size_t const get_index(size_t const x, size_t const y, size_t const z) const;
 
 	bit_function bool const   read_bit(size_t const index) const;
 	bit_function bool const   read_bit(size_t const x, size_t const y, size_t const z) const;
