@@ -1,9 +1,6 @@
 #pragma once
 #include <Utility/class_helper.h>
-#include <tbb/concurrent_queue.h>
-#include <tbb/task.h>
-#include <tbb/atomic.h>
-#include <tbb/scalable_allocator.h>
+#include <tbb/tbb.h>
 #include <atomic>
 #include <Random/superrandom.hpp>
 
@@ -513,7 +510,7 @@ bool const async_long_task::initialize(unsigned long const (&cores)[2], uint32_t
 
 bool const async_long_task::wait_for_all(milliseconds const timeout)
 {
-	tTime tStart = critical_now();
+	tTime const tStart(critical_now());
 
 	bool bWaitState(false);
 

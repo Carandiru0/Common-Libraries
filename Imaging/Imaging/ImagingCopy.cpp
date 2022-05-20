@@ -2341,7 +2341,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 {
 	std::error_code error{};
 
-	mio::mmap_source mmap = mio::make_mmap_source(filenamepath, error);
+	mio::mmap_source mmap = mio::make_mmap_source(filenamepath, false, error);
 	if (!error) {
 
 		if (mmap.is_open() && mmap.is_mapped()) {
