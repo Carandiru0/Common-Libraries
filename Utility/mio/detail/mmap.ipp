@@ -59,9 +59,9 @@ template<
     >::type
 > file_handle_type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
-    auto const handle = ::CreateFileA(c_str(path),
+    auto const handle = ::CreateFile(c_str(path),
             (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_SHARE_DELETE,
             0,
             OPEN_EXISTING,
             (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
@@ -80,9 +80,9 @@ typename std::enable_if<
     file_handle_type
 >::type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
-    auto const handle = ::CreateFileW(c_str(path),
+    auto const handle = ::CreateFile(c_str(path),
             (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_SHARE_DELETE,
             0,
             OPEN_EXISTING,
             (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
