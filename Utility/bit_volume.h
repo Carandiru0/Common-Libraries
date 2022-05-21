@@ -29,8 +29,9 @@ struct no_vtable bit_volume
 	static_assert((0 == Width % element_count) && (0 == Height % element_count) && (0 == Depth % element_count), "bit_volume dimensions are invalid");
 
 	static constexpr size_t const stride = { (Width * Height * Depth) / element_count };	// number of blocks for each dimension
-
 public:
+	static constexpr size_t const total_bit_count = Width * Height * Depth;
+
 	static constexpr size_t const width() { return(Width); }
 	static constexpr size_t const height() { return(Height); }
 	static constexpr size_t const depth() { return(Depth); }
@@ -50,11 +51,15 @@ public:
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
 	__forceinline constexpr size_t const size() const { return(stride * sizeof(bits)); }
+
+	size_t const bits_set_count() const { return(_bitsSet); }
+	size_t const bits_clear_count() const { return(total_bit_count - _bitsSet); }
+	
 	void clear();
 
 private:
 	bits			_bits[stride] = {};
-	
+	size_t			_bitsSet;
 public:
 	// static public methods that should be used for construction/destruction of bit_volume on the heap. These provide alignment support on a cacheline to avoid some false sharing.
 	__declspec(safebuffers) static inline bit_volume<Width, Height, Depth>* const __restrict create()
@@ -106,6 +111,7 @@ bit_function void bit_volume<Width, Height, Depth>::set_bit(size_t const index)
 
 	// set
 	_bits[block] |= bit;
+	++_bitsSet;
 }
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::set_bit(size_t const x, size_t const y, size_t const z)
@@ -121,6 +127,7 @@ bit_function void bit_volume<Width, Height, Depth>::clear_bit(size_t const index
 
 	// clear
 	_bits[block] &= (~bit);
+	--_bitsSet;
 }
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::clear_bit(size_t const x, size_t const y, size_t const z)
@@ -137,6 +144,7 @@ bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const index
 	// Conditionally set or clear bits without branching
 	// https://graphics.stanford.edu/~seander/bithacks.html#ConditionalSetOrClearBitsWithoutBranching
 	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
+	_bitsSet = (size_t)((int64_t)_bitsSet) + ((((int64_t)state) << 1) - 1);
 }
 template<size_t const Width, size_t const Height, size_t const Depth>
 bit_function void bit_volume<Width, Height, Depth>::write_bit(size_t const x, size_t const y, size_t const z, bool const state)
@@ -148,4 +156,5 @@ template<size_t const Width, size_t const Height, size_t const Depth>
 void bit_volume<Width, Height, Depth>::clear()
 {
 	memset(_bits, 0, size());
+	_bitsSet = 0;
 }
