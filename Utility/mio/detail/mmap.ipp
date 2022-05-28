@@ -26,6 +26,7 @@
 #include "string_util.hpp"
 
 #include <algorithm>
+#include <filesystem>
 
 #ifndef _WIN32
 # include <unistd.h>
@@ -59,11 +60,13 @@ template<
     >::type
 > file_handle_type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
+    int const disposition(std::filesystem::exists(path) ? OPEN_EXISTING : CREATE_NEW);
+ 	
     auto const handle = ::CreateFile(c_str(path),
-            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
-            FILE_SHARE_DELETE,
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_WRITE)),
+            (mode == access_mode::read ? FILE_SHARE_READ : 0) | FILE_SHARE_DELETE,
             0,
-            OPEN_EXISTING,
+            disposition,
             (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
             0);
 	
@@ -80,11 +83,13 @@ typename std::enable_if<
     file_handle_type
 >::type open_file_helper(const String& path, const access_mode mode, bool const temporary)
 {
+    int const disposition(std::filesystem::exists(path) ? OPEN_EXISTING : CREATE_NEW);
+
     auto const handle = ::CreateFile(c_str(path),
-            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ | GENERIC_WRITE)),
-            FILE_SHARE_DELETE,
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_WRITE)),
+            (mode == access_mode::read ? FILE_SHARE_READ : 0) | FILE_SHARE_DELETE,
             0,
-            OPEN_EXISTING,
+            disposition,
             (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
             0);
 	

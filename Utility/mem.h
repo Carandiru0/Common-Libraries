@@ -1,6 +1,19 @@
 // intrinsic memcpy, memset fastest benchmarks run.
 // this is the new memory file
 
+// *** important note about using memcpy and memset, and these functions, when suitable, are better ***
+// https://msrc-blog.microsoft.com/2021/01/11/building-faster-amd64-memset-routines/
+// Uncached memory Performance
+// "A partner noticed that memset performance when operating on uncached memory was severely degraded for very large sizes. 
+// On the CPU’s we tested, SSE stores are 16x faster than using enhanced “rep stosb”. 
+// This indicates that on uncached memory, “rep stosb” stores one byte at a time. It is very fast with cached or write back memory only."
+// "As there is no way for memset to determine what kind of memory it is writing to, we decided to leave the code as - is. Drivers that need to zero large regions of uncached memory quickly can either write their own SSE loop....."
+
+// *************************************************************************************************************************************************************************
+// so the limited use case for memclr() is for fast clears to [write-combined memory], (GPU Staging Buffers, etc.) or [any memory that is not cached!]
+// [16x - 64x faster than memset() when the memory is [aligned] to a minimum of a 16 byte boundary, w/ 64 byte boundary being the largest alignment and potentially fastest.
+// *************************************************************************************************************************************************************************
+
 #pragma once
 #include "..\Math\superfastmath.h"
 
@@ -37,6 +50,8 @@ template<size_t const alignment>
 INLINE_MEMFUNC __memclr_stream(void* const __restrict dest, size_t bytes);   // for streaming stores/non-temporal / write combined memory dest
 template<size_t const alignment>
 INLINE_MEMFUNC __memset_stream(void* const __restrict dest, int const value, size_t bytes);	// for streaming stores/non-temporal / write combined memory dest
+template<size_t const alignment>
+INLINE_MEMFUNC __memset_threaded(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE));
 
 // [copies]
 /* use the native intrinsic memcpy() for small data - if it's a *large* copy __memcpy_stream is better. */
@@ -241,6 +256,12 @@ INLINE_MEMFUNC __memcpy_stream(void* const __restrict dest, void const* const __
 	static constexpr size_t const element_size = sizeof(__m256i);
 	static constexpr size_t const block_size = internal_mem::_cache_size;
 	
+	if (bytes < block_size) {
+
+		memcpy(std::assume_aligned<alignment>(dest), std::assume_aligned<alignment>(src), bytes); // use intrinsic memcpy if less than page size.
+		return;
+	}
+	
 	alignas(alignment) uint8_t* __restrict d((uint8_t* __restrict)std::assume_aligned<alignment>(dest));
 	alignas(alignment) uint8_t const * __restrict s((uint8_t const* __restrict)std::assume_aligned<alignment>(src));
 
@@ -290,6 +311,21 @@ INLINE_MEMFUNC __memcpy_threaded(void* const __restrict dest, void const* const 
 			ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
 
 			__memcpy_stream<alignment>((__m256i* const __restrict)(((uint8_t const* const __restrict)dest) + offset), block.begin(), (size_t const)current_block_size);
+		}
+	);
+}
+
+template<size_t const alignment>
+INLINE_MEMFUNC __memset_threaded(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size)
+{
+	tbb::parallel_for(
+		tbb::blocked_range<__m256i const* __restrict>((__m256i* const __restrict)dest, (__m256i* const __restrict)(((uint8_t const* const __restrict)dest) + bytes), block_size),
+		[&](tbb::blocked_range<__m256i const* __restrict> block) {
+
+			ptrdiff_t const offset(((uint8_t const* const __restrict)block.begin()) - ((uint8_t const* const __restrict)dest));
+			ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
+
+			__memset_stream<alignment>((__m256i* const __restrict)(((uint8_t const* const __restrict)dest) + offset), value, (size_t const)current_block_size);
 		}
 	);
 }

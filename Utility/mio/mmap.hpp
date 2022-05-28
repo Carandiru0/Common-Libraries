@@ -472,15 +472,15 @@ mmap_source make_mmap_source(const MappingToken& token, bool const temporary, st
  */
 template<typename MappingToken>
 mmap_sink make_mmap_sink(const MappingToken& token, mmap_sink::size_type offset,
-        mmap_sink::size_type length, std::error_code& error)
+        mmap_sink::size_type length, bool const temporary, std::error_code& error)
 {
-    return make_mmap<mmap_sink>(token, offset, length, error);
+    return make_mmap<mmap_sink>(token, offset, length, temporary, error);
 }
 
 template<typename MappingToken>
-mmap_sink make_mmap_sink(const MappingToken& token, std::error_code& error)
+mmap_sink make_mmap_sink(const MappingToken& token, bool const temporary, std::error_code& error)
 {
-    return make_mmap_sink(token, 0, map_entire_file, error);
+    return make_mmap_sink(token, 0, map_entire_file, temporary, error);
 }
 
 } // namespace mio

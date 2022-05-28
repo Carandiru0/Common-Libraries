@@ -36,7 +36,7 @@ public:
 	static constexpr size_t const height() { return(Height); }
 	static constexpr size_t const depth() { return(Depth); }
 	
-	__forceinline size_t const get_index(size_t const x, size_t const y, size_t const z) const;
+	STATIC_INLINE_PURE size_t const get_index(size_t const x, size_t const y, size_t const z);
 
 	bit_function bool const   read_bit(size_t const index) const;
 	bit_function bool const   read_bit(size_t const x, size_t const y, size_t const z) const;
@@ -82,7 +82,7 @@ public:
 	}
 };
 template<size_t const Width, size_t const Height, size_t const Depth>
-__forceinline size_t const bit_volume<Width, Height, Depth>::get_index(size_t const x, size_t const y, size_t const z) const
+__inline __declspec(noalias) size_t const bit_volume<Width, Height, Depth>::get_index(size_t const x, size_t const y, size_t const z)
 {
 	// slices ordered by Y: <---- USING Y
 	// (y * xMax * zMax) + (z * xMax) + x;
