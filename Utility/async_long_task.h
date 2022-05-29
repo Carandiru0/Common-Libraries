@@ -245,15 +245,10 @@ public:
 				return(true); // task is active
 			}
 
-			bool bAlerted(false);
-
 			while (task == _current_task[thread]) {  // wait until current task clears
 				
 				// bugfix - must wakeup when idle for extended periods of time, and if program is not foreground task could have silently completed
-				if (!bAlerted) {
-					wake_up(thread);
-					bAlerted = true;
-				}
+				wake_up(thread);
 				_mm_pause();
 			}
 
