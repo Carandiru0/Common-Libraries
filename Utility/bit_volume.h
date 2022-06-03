@@ -8,6 +8,7 @@ To view a copy of this license, visit http://creativecommons.org/licenses/by-nc-
 or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
  */
 #pragma once
+#pragma warning( disable : 4804 )	// unsafe "-" on type bool
 #include <tbb\cache_aligned_allocator.h>
 #include <Utility/mem.h>
 #include <Utility/class_helper.h>
