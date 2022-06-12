@@ -70,7 +70,7 @@ namespace internal_only
 
 static constexpr uint32_t const HISTORY_SZ = 8;
 
-class alignas(32) async_long_task : no_copy
+class async_long_task : no_copy
 {
 public:
 	enum beats
@@ -487,7 +487,7 @@ bool const async_long_task::initialize(unsigned long const (&cores)[2], uint32_t
 
 	_hThread[background_critical] = (void* const)_beginthread(&async_long_task::background_thread<background_critical>, thread_stack_size, nullptr);
 	_hThread[background] = (void* const)_beginthread(&async_long_task::background_thread<background>, thread_stack_size, nullptr);
-
+	
 	if (_hThread[background_critical] && _hThread[background]) {
 
 		if (0 != cores[0]) {

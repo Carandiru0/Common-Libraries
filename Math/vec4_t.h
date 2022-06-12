@@ -10,6 +10,8 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #pragma once
 #pragma warning( disable : 4166 )   // __vectorcall on ctor's
 
+#include <stdint.h>
+
 template<typename T, size_t const alignment>
 struct alignas(alignment) vec4_t  // SCALAR ACCESS
 {

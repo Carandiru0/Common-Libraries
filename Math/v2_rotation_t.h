@@ -11,6 +11,7 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #define VECTOR_ROTATION_H
 #include "superfastmath.h"
 #include "point2D_t.h"
+#include <numbers>
 
 struct alignas(16) v2_rotation_t {
 

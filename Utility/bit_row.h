@@ -44,9 +44,8 @@ public:
 	void clear();
 
 private:
-	bits	_bits[stride] = {};
+	alignas(CACHE_LINE_BYTES) bits	_bits[stride];
 
-	[[maybe_unused]] uint8_t __padding[CACHE_LINE_BYTES << 1]; // padding to prevent false sharing *do not remove*
 public:
 	// static public methods that should be used for construction/destruction of bit_volume on the heap. These provide alignment support on a cacheline to avoid some false sharing.
 	__declspec(safebuffers) static inline bit_row<Length>* const __restrict create(size_t const row_count = 1)
@@ -54,7 +53,7 @@ public:
 		tbb::cache_aligned_allocator< bit_row<Length> > allocator;
 		bit_row<Length>* const __restrict pReturn(static_cast<bit_row<Length>*const __restrict>(allocator.allocate(row_count)));
 
-		__memclr_stream<CACHE_LINE_BYTES>(pReturn, row_count * sizeof(bit_row<Length>));
+		pReturn->clear();
 
 		return(pReturn);
 	}
