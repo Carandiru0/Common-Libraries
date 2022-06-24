@@ -282,6 +282,113 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 	//-----------------------------------------------------------------------------------------------------------------------------------------------//
 
+	// clamping and saturation with type conversion:
+	//
+
+	STATIC_INLINE_PURE __m256 const __vectorcall clamp(__m256 const a, __m256 const min_, __m256 const max_)
+	{
+		return(_mm256_min_ps(_mm256_max_ps(a, min_), max_));
+	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall clamp(FXMVECTOR a, FXMVECTOR min_, FXMVECTOR max_)
+	{
+		return(_mm_min_ps(_mm_max_ps(a, min_), max_));
+	}
+	STATIC_INLINE_PURE float const __vectorcall clamp(float const a, float const min_, float const max_)
+	{
+		return(_mm_cvtss_f32(_mm_min_ss(_mm_max_ss(_mm_set_ss(a), _mm_set_ss(min_)), _mm_set_ss(max_))));
+	}
+	STATIC_INLINE_PURE __m256i __vectorcall clamp(__m256i const a, __m256i const min_, __m256i const max_)
+	{
+		return(_mm256_min_epi32(_mm256_max_epi32(a, min_), max_));
+	}
+	STATIC_INLINE_PURE __m128i __vectorcall clamp(__m128i const a, __m128i const min_, __m128i const max_)
+	{
+		return(_mm_min_epi32(_mm_max_epi32(a, min_), max_));
+	}
+#define clamp_m256i clamp
+#define clamp_m128i clamp
+
+	STATIC_INLINE_PURE __m256 const __vectorcall saturate(__m256 const a) // for special case of between 0.0f and 1.0f
+	{
+		return(_mm256_min_ps(_mm256_max_ps(a, _mm256_setzero_ps()), _mm256_set1_ps(1.0f)));
+	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall saturate(FXMVECTOR const a) // for special case of between 0.0f and 1.0f
+	{
+		return(_mm_min_ps(_mm_max_ps(a, _mm_setzero_ps()), _mm_set1_ps(1.0f)));
+	}
+	STATIC_INLINE_PURE float const __vectorcall saturate(float const a) // for special case of between 0.0f and 1.0f
+	{
+		return(_mm_cvtss_f32(_mm_min_ss(_mm_max_ss(_mm_set_ss(a), _mm_setzero_ps()), _mm_set_ss(1.0f))));
+	}
+
+	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u8(float const a) // implicitly rounds to nearest int
+	{
+		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtps_epi32(_mm_set1_ps(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX))));
+	}
+	STATIC_INLINE_PURE __m256i const __vectorcall saturate_to_u8(__m256d const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m256i(_mm256_castsi128_si256(_mm256_cvtpd_epi32(xmVectorColor)), _mm256_setzero_si256(), _mm256_set1_epi32(UINT8_MAX)));
+	}
+	STATIC_INLINE_PURE __m256i const __vectorcall saturate_to_u8(__m256 const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m256i(_mm256_cvtps_epi32(xmVectorColor), _mm256_setzero_si256(), _mm256_set1_epi32(UINT8_MAX)));
+	}
+	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u8(__m128 const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
+	}
+	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u16(__m128 const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX)));
+	}
+	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u8(__m128i const a)
+	{
+		return(clamp_m128i(a, _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
+	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u8(int const a)
+	{
+		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_set1_epi32(a), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX))));
+	}
+
+	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
+	{
+		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
+	}
+	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128i const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
+	{
+		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
+	}
+	STATIC_INLINE_PURE void __vectorcall saturate_to_u16(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
+	{
+		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u16(xmVectorColor));
+	}
+
+	STATIC_INLINE_PURE float const __vectorcall u8_to_float(uint8_t const byte) // byte (0-255) to normalized float (0.0f ... 1.0f)
+	{
+		constexpr float const INV_BYTE = 1.0f / 255.0f;
+
+		return(_mm256_cvtss_f32(saturate(_mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_set1_epi32(byte)), _mm256_set1_ps(INV_BYTE)))));
+	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall float_to_u8(float const norm) // normalized float (0.0f ... 1.0f) to byte (0-255)
+	{
+		constexpr float const BYTE = 255.0f;
+
+		return(_mm256_cvtsi256_si32(saturate_to_u8(_mm256_mul_ps(_mm256_set1_ps(norm), _mm256_set1_ps(BYTE)))));
+	}
+
+	// for abgr(rgba) (packed color) conversion to float
+	STATIC_INLINE_PURE float const uintBitsToFloat(uint32_t const hex)
+	{
+		// implicit conversion of hex data uint32_t to floatBits
+		return(*reinterpret_cast<float const* const __restrict>(&hex)); // in glsl use floatBitsToUint to convert the float back to a uint with all bits intact
+	}
+	// for float conversion to abgr(rgba) (packed color)
+	STATIC_INLINE_PURE uint32_t const floatBitsToUint(float const hex)
+	{
+		// implicit conversion of hex data floatBits to uint32_t
+		return(*reinterpret_cast<uint32_t const* const __restrict>(&hex)); // in glsl use uintBitsToFloat to convert the uint back to a float with all bits intact
+	}
+	
 	// rcp, sqrt, rqsrt:
 	//
 
@@ -584,6 +691,41 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return(lerp(A, B, t));
 	}
 
+	// https://www.shadertoy.com/view/Xt23zV - Dave Hoskins 
+	// Linear Step - give it a range [edge0, edge1] and a fraction between [0...1]
+	// returns the normalized [0...1] equivalent of whatever range [edge0, edge1] is, linearly.
+	// (like smoothstep, except it's purely linear
+	STATIC_INLINE_PURE float const __vectorcall linearstep(float const edge0, float const edge1, float const x)
+	{
+		return(saturate((x - edge0) / (edge1 - edge0)));
+	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall linearstep(XMVECTOR const edge0, XMVECTOR const edge1, XMVECTOR const x)
+	{
+		return(SFM::saturate((x - edge0) / (edge1 - edge0)));
+	}
+	/*
+	// linearstep is invertable, derived inverse_linearstep:
+	float inverse_linearstep(in const float edge0, in const float edge1, in const float d)
+	{
+		//       (x - edge0)
+		// d = ---------------
+		//     (edge1 - edge0)
+		//
+		// x = d * (edge1 - edge0) + edge0
+		//
+		// herbie optimized -> fma(d, edge1 - edge0, edge0)
+		return( clamp(fma(d, edge1 - edge0, edge0), 0.0f, 1.0f) );
+	}
+	*/
+	STATIC_INLINE_PURE float const __vectorcall inverse_linearstep(float const edge0, float const edge1, float const d)
+	{
+		return(SFM::saturate(SFM::__fma(d, edge1 - edge0, edge0)));
+	}
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall inverse_linearstep(XMVECTOR const edge0, XMVECTOR const edge1, XMVECTOR const d)
+	{
+		return(SFM::saturate(SFM::__fma(d, edge1 - edge0, edge0)));
+	}
+	
 	// tNorm = current time / total duration = [0.0f... 1.0f] //
 	STATIC_INLINE_PURE float const __vectorcall smoothstep(float const A, float const B, float const tNorm)
 	{
@@ -1132,113 +1274,6 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		x |= x >> 8;
 		x |= x >> 16;
 		return(++x);
-	}
-
-	// clamping and saturation with type conversion:
-	//
-
-	STATIC_INLINE_PURE __m256 const __vectorcall clamp(__m256 const a, __m256 const min_, __m256 const max_)
-	{
-		return(_mm256_min_ps(_mm256_max_ps(a, min_), max_));
-	}
-	STATIC_INLINE_PURE XMVECTOR const __vectorcall clamp(FXMVECTOR a, FXMVECTOR min_, FXMVECTOR max_)
-	{
-		return(_mm_min_ps(_mm_max_ps(a, min_), max_));
-	}
-	STATIC_INLINE_PURE float const __vectorcall clamp(float const a, float const min_, float const max_)
-	{
-		return(_mm_cvtss_f32(_mm_min_ss(_mm_max_ss(_mm_set_ss(a), _mm_set_ss(min_)), _mm_set_ss(max_))));
-	}
-	STATIC_INLINE_PURE __m256i __vectorcall clamp(__m256i const a, __m256i const min_, __m256i const max_)
-	{
-		return(_mm256_min_epi32(_mm256_max_epi32(a, min_), max_));
-	}
-	STATIC_INLINE_PURE __m128i __vectorcall clamp(__m128i const a, __m128i const min_, __m128i const max_)
-	{
-		return(_mm_min_epi32(_mm_max_epi32(a, min_), max_));
-	}
-#define clamp_m256i clamp
-#define clamp_m128i clamp
-
-	STATIC_INLINE_PURE __m256 const __vectorcall saturate(__m256 const a) // for special case of between 0.0f and 1.0f
-	{
-		return(_mm256_min_ps(_mm256_max_ps(a, _mm256_setzero_ps()), _mm256_set1_ps(1.0f)));
-	}
-	STATIC_INLINE_PURE XMVECTOR const __vectorcall saturate(FXMVECTOR const a) // for special case of between 0.0f and 1.0f
-	{
-		return(_mm_min_ps(_mm_max_ps(a, _mm_setzero_ps()), _mm_set1_ps(1.0f)));
-	}
-	STATIC_INLINE_PURE float const __vectorcall saturate(float const a) // for special case of between 0.0f and 1.0f
-	{
-		return(_mm_cvtss_f32(_mm_min_ss(_mm_max_ss(_mm_set_ss(a), _mm_setzero_ps()), _mm_set_ss(1.0f))));
-	}
-
-	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u8(float const a) // implicitly rounds to nearest int
-	{
-		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtps_epi32(_mm_set1_ps(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX))));
-	}
-	STATIC_INLINE_PURE __m256i const __vectorcall saturate_to_u8(__m256d const xmVectorColor) // implicitly rounds to nearest int
-	{
-		return(clamp_m256i(_mm256_castsi128_si256(_mm256_cvtpd_epi32(xmVectorColor)), _mm256_setzero_si256(), _mm256_set1_epi32(UINT8_MAX)));
-	}
-	STATIC_INLINE_PURE __m256i const __vectorcall saturate_to_u8(__m256 const xmVectorColor) // implicitly rounds to nearest int
-	{
-		return(clamp_m256i(_mm256_cvtps_epi32(xmVectorColor), _mm256_setzero_si256(), _mm256_set1_epi32(UINT8_MAX)));
-	}
-	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u8(__m128 const xmVectorColor) // implicitly rounds to nearest int
-	{
-		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
-	}
-	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u16(__m128 const xmVectorColor) // implicitly rounds to nearest int
-	{
-		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX)));
-	}
-	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u8(__m128i const a)
-	{
-		return(clamp_m128i(a, _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
-	}
-	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u8(int const a)
-	{
-		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_set1_epi32(a), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX))));
-	}
-
-	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
-	{
-		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
-	}
-	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128i const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
-	{
-		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u8(xmVectorColor));
-	}
-	STATIC_INLINE_PURE void __vectorcall saturate_to_u16(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
-	{
-		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u16(xmVectorColor));
-	}
-
-	STATIC_INLINE_PURE float const __vectorcall u8_to_float(uint8_t const byte) // byte (0-255) to normalized float (0.0f ... 1.0f)
-	{
-		constexpr float const INV_BYTE = 1.0f / 255.0f;
-
-		return(_mm256_cvtss_f32(saturate(_mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_set1_epi32(byte)), _mm256_set1_ps(INV_BYTE)))));
-	}
-	STATIC_INLINE_PURE uint32_t const __vectorcall float_to_u8(float const norm) // normalized float (0.0f ... 1.0f) to byte (0-255)
-	{
-		constexpr float const BYTE = 255.0f;
-
-		return(_mm256_cvtsi256_si32(saturate_to_u8(_mm256_mul_ps(_mm256_set1_ps(norm), _mm256_set1_ps(BYTE)))));
-	}
-
-	// for abgr(rgba) (packed color) conversion to float
-	STATIC_INLINE_PURE float const uintBitsToFloat(uint32_t const hex)
-	{
-		// implicit conversion of hex data uint32_t to floatBits
-		return(*reinterpret_cast<float const* const __restrict>(&hex)); // in glsl use floatBitsToUint to convert the float back to a uint with all bits intact
-	}
-	// for float conversion to abgr(rgba) (packed color)
-	STATIC_INLINE_PURE uint32_t const floatBitsToUint(float const hex)
-	{
-		// implicit conversion of hex data floatBits to uint32_t
-		return(*reinterpret_cast<uint32_t const* const __restrict>(&hex)); // in glsl use uintBitsToFloat to convert the uint back to a float with all bits intact
 	}
 	
 	// color and rgba:

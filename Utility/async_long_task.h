@@ -103,19 +103,7 @@ public:
 		static constexpr uint32_t TRY_COUNT(2);
 
 		[[unlikely]] if (0 == task) {
-			// task doesn't exist, query intended as wait for this thread_id's completion of all pending tasks
-			if constexpr (test_only) {
-				return(!_items[thread].empty()); // any unfinished tasks will cause this to return true which is "task is pending" state returned. otherwise, returns false as in "all tasks finished"
-			}
-			else {
-				while (!_items[thread].empty()) {
-
-					wake_up(thread);
-					_mm_pause();
-				}
-				
-				return(false); // all tasks finished
-			}
+			return(false); // a task with an id of zero is invalid, return immediately
 		}
 
 		bool bFound(task == _current_task[thread]); // fast simple check
