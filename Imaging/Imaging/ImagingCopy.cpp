@@ -2345,7 +2345,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 	if (!error) {
 
 		if (mmap.is_open() && mmap.is_mapped()) {
-			__prefetch_vmem(mmap.data(), mmap.size());
+			___prefetch_vmem(mmap.data(), mmap.size());
 
 			uint8_t const* const pReadPointer((uint8_t*)mmap.data());
 

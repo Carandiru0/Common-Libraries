@@ -161,7 +161,8 @@ typedef struct ImagingLUT	// 16bit/channel 3D LUT
 } ImagingLUT;
 
 // color operations //
-uint32_t const ImagingSRGBtoLinear(uint32_t const srgb);
+uvec4_v const ImagingSRGBtoLinearVector(uint32_t const packed_srgb);
+uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);
 
 
 // OPERATIONS //

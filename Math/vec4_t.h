@@ -142,7 +142,7 @@ public:
 		: v(v_)
 	{}
 
-	__forceinline explicit __vectorcall vec4_v(vec4_t<T, 16> const& __restrict scalar_values) // loads value stored in vec4_t
+	__forceinline __vectorcall vec4_v(vec4_t<T, 16> const& __restrict scalar_values) // loads value stored in vec4_t
 		: v(_mm_load_si128((__m128i*)scalar_values.data))
 	{}
 	

@@ -783,6 +783,19 @@ constinit static inline uint8_t const srgb_to_linear_lut[256] = { // single chan
 	255
 };
 
+uvec4_v const ImagingSRGBtoLinearVector(uint32_t const packed_srgb)
+{
+	uvec4_t srgb;
+	SFM::unpack_rgba(packed_srgb, srgb);
+
+	uvec4_t linear;
+	linear.r = srgb_to_linear_lut[srgb.r];
+	linear.g = srgb_to_linear_lut[srgb.g];
+	linear.b = srgb_to_linear_lut[srgb.b];
+	linear.a = srgb.a;
+	
+	return{ linear };
+}
 uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb)
 {
 	uvec4_t srgb;
