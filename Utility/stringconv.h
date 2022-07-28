@@ -7,9 +7,11 @@
 #include <string_view>
 #include <cctype>
 #include <cwctype>
+#include <algorithm>
 #include <Math/superfastmath.h>
 
 #define MAX_GUID 40
+#define HRESULT long
 
 namespace stringconv
 {
