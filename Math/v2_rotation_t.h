@@ -66,9 +66,7 @@ private:
 
 		s = SFM::sincos(&c, fAngle);	// SVML of sincos is precise enough for trig identities
 
-
-		//s = std::sin(fAngle);		// must use precise sinf and cosf C99 functions
-		//c = std::cos(fAngle);		// precision must be maintained for the trig identity function optimizations to work properly
+										// precision must be maintained for the trig identity function optimizations to work properly
 										// the trig identity functions do NOT accumulate properly - error also begins to accumulate
 										// so they are really only an optimization for the most useful case where a discrete angle needs
 		Angle = fAngle;					// to be added/subtracted from and existing angle without the recalculation of sin/cos
@@ -80,7 +78,6 @@ public:
 	inline explicit v2_rotation_t(float const fCos, float const fSin, float const fAngle) // in radians
 		: c(fCos), s(fSin), Angle(fAngle)
 	{}
-	
 public:		
 	inline v2_rotation_t()
 		: c(1.0f), s(0.0f), Angle(0.0f)
@@ -234,6 +231,46 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v2_rotate(FXMVECTOR const xmP, v2_
 					   SFM::__fma(p.x, angle.sine(),   p.y * angle.cosine()), 0.0f, 0.0f));
 }
 
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, FXMVECTOR const xmCS)
+{
+	XMFLOAT3A p;
+	XMFLOAT2A cs;
+	XMStoreFloat3A(&p, xmP);
+	XMStoreFloat2A(&cs, xmCS);
+
+	// rotate point ( Row = X Axis )
+	// xmAxis.r[1] = XMVectorSet( 0.0f, c, -s, 1.0f );
+	// xmAxis.r[2] = XMVectorSet( 0.0f, s, c, 1.0f);
+
+	return(XMVectorSet(p.x,
+					   SFM::__fms(p.y, cs.x, p.z * cs.y),
+					   SFM::__fma(p.y, cs.y, p.z * cs.x), 0.0f));
+}
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, v2_rotation_t const angle)
+{
+	return(v3_rotate_roll(xmP, angle.v2()));
+}
+
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR const xmP, FXMVECTOR const xmCS)
+{
+	XMFLOAT3A p;
+	XMFLOAT2A cs;
+	XMStoreFloat3A(&p, xmP);
+	XMStoreFloat2A(&cs, xmCS);
+
+	// rotate point ( Yaw = Y Axis )
+	// xmAxis.r[0] = XMVectorSet( c, 0.0f, -s, 1.0f );
+	// xmAxis.r[2] = XMVectorSet( s, 0.0f,  c, 1.0f );
+
+	return(XMVectorSet(SFM::__fms(p.x, cs.x, p.z * cs.y),
+					   p.y,
+					   SFM::__fma(p.x, cs.y, p.z * cs.x), 0.0f));
+}
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR const xmP, v2_rotation_t const angle)
+{
+	return(v3_rotate_yaw(xmP, angle.v2()));
+}
+
 STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xmP, FXMVECTOR const xmCS)
 {
 	XMFLOAT3A p;
@@ -252,25 +289,7 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xm
 {
 	return(v3_rotate_pitch(xmP, angle.v2()));
 }
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_azimuth(FXMVECTOR const xmP, FXMVECTOR const xmCS)
-{
-	XMFLOAT3A p;
-	XMFLOAT2A cs;
-	XMStoreFloat3A(&p, xmP);
-	XMStoreFloat2A(&cs, xmCS);
 
-	// rotate point ( Azimuth = Y Axis )
-	// xmAxis.r[0] = XMVectorSet( c, 0.0f, -s, 1.0f );
-	// xmAxis.r[2] = XMVectorSet( s, 0.0f,  c, 1.0f );
-
-	return(XMVectorSet(SFM::__fms(p.x, cs.x, p.z * cs.y),
-					   p.y,
-					   SFM::__fma(p.x, cs.y, p.z * cs.x), 0.0f));
-}
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_azimuth(FXMVECTOR const xmP, v2_rotation_t const angle)
-{
-	return(v3_rotate_azimuth(xmP, angle.v2()));
-}
 
 /// #### the following functions operate in any given "space" used, rotating with respect to an origin
 STATIC_INLINE_PURE point2D_t const p2D_rotate(point2D_t p, point2D_t const origin, v2_rotation_t const angle)
@@ -297,18 +316,39 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v2_rotate(FXMVECTOR p, XMVECTOR co
 	return(XMVectorAdd(xmP, origin));
 }
 
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_azimuth(FXMVECTOR p, XMVECTOR const origin, v2_rotation_t const angle)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR p, XMVECTOR const origin, v2_rotation_t const angle)
 {
 	// translate point back to origin:
 	XMVECTOR xmP = XMVectorSubtract(p, origin);
 
 	// rotate point
-	xmP = v3_rotate_azimuth(xmP, angle);
+	xmP = v3_rotate_roll(xmP, angle);
 
 	// translate point back:
 	return(XMVectorAdd(xmP, origin));
 }
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR p, XMVECTOR const origin, v2_rotation_t const angle)
+{
+	// translate point back to origin:
+	XMVECTOR xmP = XMVectorSubtract(p, origin);
 
+	// rotate point
+	xmP = v3_rotate_yaw(xmP, angle);
+
+	// translate point back:
+	return(XMVectorAdd(xmP, origin));
+}
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR p, XMVECTOR const origin, v2_rotation_t const angle)
+{
+	// translate point back to origin:
+	XMVECTOR xmP = XMVectorSubtract(p, origin);
+
+	// rotate point
+	xmP = v3_rotate_pitch(xmP, angle);
+
+	// translate point back:
+	return(XMVectorAdd(xmP, origin));
+}
 
 /// #### following rotation functions operate in screenspace, rotation is done isometrically
 STATIC_INLINE_PURE point2D_t const p2D_rotate_iso(point2D_t const p, v2_rotation_t const angle)
