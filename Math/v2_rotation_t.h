@@ -238,7 +238,7 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP
 	XMStoreFloat3A(&p, xmP);
 	XMStoreFloat2A(&cs, xmCS);
 
-	// rotate point ( Row = X Axis )
+	// rotate point ( Roll = X Axis )
 	// xmAxis.r[1] = XMVectorSet( 0.0f, c, -s, 1.0f );
 	// xmAxis.r[2] = XMVectorSet( 0.0f, s, c, 1.0f);
 
