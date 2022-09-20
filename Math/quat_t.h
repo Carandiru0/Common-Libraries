@@ -10,34 +10,34 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 #ifndef QUATERNION_H
 #define QUATERNION_H
 #include "superfastmath.h"
+#include "v2_rotation_t.h"
 #include <numbers>
 
-struct quat_t {
+struct alignas(16) quat_t { // *valid only for rotation quaternions*
 
 private:
-	XMFLOAT4	_quaternion;
+	XMFLOAT4A	_quaternion;
 
 public:
-	__forceinline XMVECTOR const __vectorcall v4() const { return(XMLoadFloat4(&_quaternion)); }
+	__forceinline XMVECTOR const __vectorcall v4() const { return(XMLoadFloat4A(&_quaternion)); }
 
 public:
 	// by another quaternion
 	inline explicit quat_t(FXMVECTOR quat) 
-		//: _quaternion{ 0.0f, 0.0f, 0.0f, 1.0f } // identity
 	{
-		XMStoreFloat4(&_quaternion, quat);
-	}
-public:		
+		XMStoreFloat4A(&_quaternion, quat);
+	}	
 	// *careful* do NOT ever bmi or initialize a quat_t object with 0.0f, use the default empty ctor instead !!!!
 	inline quat_t()
 		: _quaternion{ 0.0f, 0.0f, 0.0f, 1.0f } // identity
 	{
 	}
 	
-	// roll = rotation around x axis
+	// pitch = rotation around x axis
 	// yaw = rotation around y axis
-	// pitch = rotation around z axis
-	quat_t const& __vectorcall roll_yaw_pitch(float const xRoll, float const yYaw, float const zPitch) // for updating quaternion from roll yaw and pitch
+	// roll = rotation around z axis
+	/*
+	XMVECTOR const __vectorcall pitch_yaw_roll(float const xPitch, float const yYaw, float const zRoll) const // for updating quaternion from pitch, yaw and roll
 	{
 		// cheaper to actually calculate again - single sincos vectorizxed for all 3 angles
 
@@ -52,11 +52,11 @@ public:
 		constinit static const XMVECTORF32  Sign = { { { 1.0f, -1.0f, 1.0f, -1.0f } } };
 
 		//                                                 *do not change* extremely sensitive to order & sign
-		XMVECTOR HalfAngles = XMVectorMultiply(XMVectorSet(xRoll, -yYaw, -zPitch, 0.0f), g_XMOneHalf.v);
+		XMVECTOR const HalfAngles = XMVectorMultiply(XMVectorSet(xPitch, -yYaw, -zRoll, 0.0f), g_XMOneHalf.v);
 
 		XMVECTOR SinAngles, CosAngles;
 		SinAngles = SFM::sincos(&CosAngles, HalfAngles);
-
+		 
 		XMVECTOR const P0 = XMVectorPermute<XM_PERMUTE_0X, XM_PERMUTE_1X, XM_PERMUTE_1X, XM_PERMUTE_1X>(SinAngles, CosAngles);
 		XMVECTOR const Y0 = XMVectorPermute<XM_PERMUTE_1Y, XM_PERMUTE_0Y, XM_PERMUTE_1Y, XM_PERMUTE_1Y>(SinAngles, CosAngles);
 		XMVECTOR const R0 = XMVectorPermute<XM_PERMUTE_1Z, XM_PERMUTE_1Z, XM_PERMUTE_0Z, XM_PERMUTE_1Z>(SinAngles, CosAngles);
@@ -69,49 +69,79 @@ public:
 		Q1 = XMVectorMultiply(Q1, Y1);
 		Q0 = XMVectorMultiply(Q0, R0);
 
-		XMStoreFloat4(&_quaternion, XMVectorMultiplyAdd(Q1, R1, Q0));   /* do not change */ // *** corrected (order & sign) angles match engine coordinate xyz system layout
-
-		return(*this);
+		// do not change  // *** corrected (order & sign) angles match engine coordinate xyz system layout
+		return(XMVectorMultiplyAdd(Q1, R1, Q0));
 	}
-	inline explicit quat_t(float const xRoll, float const yYaw, float const zPitch) // preferred (euler angles)
+	*/
+
+	XMVECTOR const __vectorcall pitch_yaw_roll(float const xPitch, float const yYaw, float const zRoll) const
 	{
-		roll_yaw_pitch(xRoll, yYaw, zPitch);
+		XMVECTOR SinAngles, CosAngles;
+		SinAngles = SFM::sincos(&CosAngles, XMVectorScale(XMVectorSet(xPitch, yYaw, zRoll, 0.0f), 0.5f)); // sincos of half-angles, recalculation required.
+
+		XMVECTOR xmQx(XMVectorZero()), xmQy(XMVectorZero()), xmQz(XMVectorZero());
+
+		xmQx = XMVectorSetX(xmQx, XMVectorGetX(SinAngles));
+		xmQx = XMVectorSetW(xmQx, XMVectorGetX(CosAngles));
+
+		xmQy = XMVectorSetY(xmQy, XMVectorGetY(SinAngles));
+		xmQy = XMVectorSetW(xmQy, XMVectorGetY(CosAngles));
+
+		xmQz = XMVectorSetZ(xmQz, XMVectorGetZ(SinAngles));
+		xmQz = XMVectorSetW(xmQz, XMVectorGetZ(CosAngles));
+
+		xmQx = XMQuaternionNormalize(xmQx);
+		xmQy = XMQuaternionNormalize(xmQy);
+		xmQz = XMQuaternionNormalize(xmQz);
+
+		// this defines the order used - ZXY
+		return(XMQuaternionNormalize(XMQuaternionMultiply(XMQuaternionMultiply(xmQz, xmQx), xmQy))); // ZXY
 	}
 
+	inline explicit quat_t(float const xPitch, float const yYaw, float const zRoll) // secondary
+	{
+		XMStoreFloat4A(&_quaternion, pitch_yaw_roll(xPitch, yYaw, zRoll));
+	}
+	inline explicit quat_t(v2_rotation_t const& xPitch, v2_rotation_t const& yYaw, v2_rotation_t const& zRoll) // preferred
+	{
+		XMStoreFloat4A(&_quaternion, pitch_yaw_roll(xPitch.angle(), yYaw.angle(), zRoll.angle()));
+	}
 	inline bool const operator==(quat_t const& rhs) const {
 
 		return(XMVector4Equal(v4(), rhs.v4()));
 	}
 
 	inline quat_t& __vectorcall operator=(quat_t const& rhs) = default;
+	inline quat_t& __vectorcall operator=(FXMVECTOR rhs) {
+		XMStoreFloat4A(&_quaternion, rhs);
+		return(*this);
+	}
 
-	inline void __vectorcall zero() { XMStoreFloat4(&_quaternion, XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f)); }
-	inline bool const __vectorcall isZero() const {
+	inline void zero() { XMStoreFloat4A(&_quaternion, XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f)); }
+	inline bool const isZero() const {
 		return(XMVector4Equal(v4(), XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f)));
 	}
 
-	quat_t const& __vectorcall inverse()
+	XMVECTOR const __vectorcall inverse() const
 	{
-		XMStoreFloat4(&_quaternion, XMQuaternionInverse(XMLoadFloat4(&_quaternion)));
-		return(*this);
+		// For rotation quaternions, the inverse equals the conjugate
+		return(XMQuaternionConjugate(XMLoadFloat4A(&_quaternion)));
 	}
 };
 
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR const xmP, quat_t const rotation)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR const xmP, quat_t const& rotation)
 {
-	XMVECTOR const xmQ(rotation.v4());
-
-	// p + 2.0 * cross(q.xyz, cross(q.xyz, p) + q.w * p);
-	return(SFM::__fma(XMVector3Cross(xmQ, XMVectorAdd(XMVector3Cross(xmQ, xmP), XMVectorScale(xmP, XMVectorGetW(xmQ)))), XMVectorReplicate(2.0f), xmP));
+	// p` = inverse(q) * p * q
+	return( XMQuaternionMultiply(rotation.inverse(), XMQuaternionMultiply(XMVectorSetW(xmP, 0.0f), rotation.v4())) );
 }
 
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR p, XMVECTOR const origin, quat_t const angle)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR p, XMVECTOR const origin, quat_t const& rotation)
 {
 	// translate point back to origin:
 	XMVECTOR xmP = XMVectorSubtract(p, origin);
 
 	// rotate point
-	xmP = v3_rotate(xmP, angle);
+	xmP = v3_rotate(xmP, rotation);
 
 	// translate point back:
 	return(XMVectorAdd(xmP, origin));

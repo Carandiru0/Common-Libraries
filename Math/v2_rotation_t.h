@@ -128,24 +128,18 @@ public:
 	
 	inline v2_rotation_t const __vectorcall operator+(v2_rotation_t const& __restrict rhs) const	// add two angles together (only good for one-shot - no accunulation)
 	{
-		float fAngle(Angle + rhs.Angle);
-		fAngle = constrain(fAngle);
-
 		// trig identities for sum 2 angles
 		// cos(a + b) = cos(a) cos(b) - sin(a) sin(b)
 		// sin(a + b) = sin(a) cos(b) + cos(a) sin(b)
-		return( v2_rotation_t(SFM::__fms(c, rhs.c, s * rhs.s), SFM::__fma(s,rhs.c , c*rhs.s), fAngle) ); // --- leverages existing sincos computations yes!
+		return( v2_rotation_t(SFM::__fms(c, rhs.c, s * rhs.s), SFM::__fma(s,rhs.c , c*rhs.s), constrain(Angle + rhs.Angle)) ); // --- leverages existing sincos computations yes!
 	}
 	
 	inline v2_rotation_t const __vectorcall operator-(v2_rotation_t const& __restrict rhs) const // subtract *this angle by another angle (only good for one-shot - no accunulation)
 	{
-		float fAngle(Angle - rhs.Angle);
-		fAngle = constrain(fAngle);
-
 		// trig identities for diff 2 angles
 		// cos(a - b) = cos(a) cos(b) + sin(a) sin(b)
 		// sin(a - b) = sin(a) cos(b) - cos(a) sin(b)
-		return( v2_rotation_t(SFM::__fma(c, rhs.c, s * rhs.s), SFM::__fms(s,rhs.c , c*rhs.s), fAngle) );	// --- leverages existing sincos computations yes!
+		return( v2_rotation_t(SFM::__fma(c, rhs.c, s * rhs.s), SFM::__fms(s,rhs.c , c*rhs.s), constrain(Angle - rhs.Angle)) );	// --- leverages existing sincos computations yes!
 	}
 	
 	/// ### the following function require recalculation of sin / cos but use the faster variants
@@ -166,27 +160,24 @@ public:
 		recalculate(Angle - fAngle);
 	}
 
-	// FAST LERP - approximate angle interpolation (use when suitable)
-	// quadtradic lerp between two v2_rotation_t's to approximate a circle interpolation that would be the result of sincos (updating the angle) usage
-	// *** this only works in first quadrant 0 - 90 degrees, so a & b must be in this range, otherwise the lerp takes a shortcut across quadrants producing an incorrect result
-	// *** this is useful in say rotating a cube, and repeating 0 - 90 degrees over and over again will visually appear as if the cube is rotating a full 360 degrees when it is only repetively rotating 90 degrees
-	// its a hack and should only be used in situations where the approximation is suitable - otherwise use the normal sincos route for recalculating new angles
-	STATIC_INLINE_PURE v2_rotation_t const __vectorcall lerp(v2_rotation_t const& __restrict a, v2_rotation_t const& __restrict b, float const t)
+	// nlerp - (normalized linear interpolation for vector) & (linear interpolation for angle) (APPROXIMATION)    **** rotation must be < 90 degrees otherwise flips can occur
+	STATIC_INLINE_PURE v2_rotation_t const __vectorcall nlerp(v2_rotation_t const& __restrict a, v2_rotation_t const& __restrict b, float const t)
 	{
 		v2_rotation_t result{};
 
-		// clamp to [0.0f ... 1.0f] range
-		float tT(SFM::saturate(t));
-
-		// apply quadratic easing to clamped input interpolation factor - applies a curve to approximate a circle as if using the real cos, sin & angle 
-		tT = SFM::ease_inout_quadratic(0.0f, 1.0f, tT);
-
 		// the v2_rotation structure is aligned 16, and contains 3 floats - hack here to speedy load of all 3 values be computed simultaneously (lerp of cos, sin & Angle)
-		XMStoreFloat3A((XMFLOAT3A* const __restrict)&result, SFM::lerp(XMLoadFloat3A((XMFLOAT3A const* const __restrict)&a), XMLoadFloat3A((XMFLOAT3A const* const __restrict)&b), tT));
+		XMVECTOR const aTb(SFM::lerp(XMLoadFloat3A((XMFLOAT3A const* const __restrict)&a), XMLoadFloat3A((XMFLOAT3A const* const __restrict)&b), t));
+		
+		XMStoreFloat3A((XMFLOAT3A* const __restrict)&result, XMVectorSelect(XMVector2Normalize(aTb), aTb, XMVectorSelectControl(0, 0, 1, 0)));
 	
 		return(result);
-	}																		
+	}	
 
+	// lerp - (linear interpolation for angle) (EXACT)    **** rotation must be < 90 degrees otherwise flips can occur
+	STATIC_INLINE_PURE v2_rotation_t const __vectorcall lerp(v2_rotation_t const& __restrict a, v2_rotation_t const& __restrict b, float const t)
+	{
+		return(v2_rotation_t(SFM::lerp(a.angle(), b.angle(), t))); // re-calculates sincos, however this is less work than slerp
+	}
 };
 
 namespace v2_rotation_constants		// good for leverage trig identity sum/diff functions. However values lower than 1 degree or if the angle is accumulated over time
@@ -231,14 +222,14 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v2_rotate(FXMVECTOR const xmP, v2_
 					   SFM::__fma(p.x, angle.sine(),   p.y * angle.cosine()), 0.0f, 0.0f));
 }
 
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, FXMVECTOR const xmCS)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xmP, FXMVECTOR const xmCS)
 {
 	XMFLOAT3A p;
 	XMFLOAT2A cs;
 	XMStoreFloat3A(&p, xmP);
 	XMStoreFloat2A(&cs, xmCS);
 
-	// rotate point ( Roll = X Axis )
+	// rotate point ( Pitch = X Axis )
 	// xmAxis.r[1] = XMVectorSet( 0.0f, c, -s, 1.0f );
 	// xmAxis.r[2] = XMVectorSet( 0.0f, s, c, 1.0f);
 
@@ -246,9 +237,9 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP
 					   SFM::__fms(p.y, cs.x, p.z * cs.y),
 					   SFM::__fma(p.y, cs.y, p.z * cs.x), 0.0f));
 }
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, v2_rotation_t const angle)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xmP, v2_rotation_t const angle)
 {
-	return(v3_rotate_roll(xmP, angle.v2()));
+	return(v3_rotate_pitch(xmP, angle.v2()));
 }
 
 STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR const xmP, FXMVECTOR const xmCS)
@@ -259,35 +250,35 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR const xmP,
 	XMStoreFloat2A(&cs, xmCS);
 
 	// rotate point ( Yaw = Y Axis )
-	// xmAxis.r[0] = XMVectorSet( c, 0.0f, -s, 1.0f );
-	// xmAxis.r[2] = XMVectorSet( s, 0.0f,  c, 1.0f );
+	// xmAxis.r[0] = XMVectorSet( c, 0.0f, s, 1.0f );
+	// xmAxis.r[2] = XMVectorSet( -s, 0.0f,  c, 1.0f );
 
-	return(XMVectorSet(SFM::__fms(p.x, cs.x, p.z * cs.y),
+	return(XMVectorSet(SFM::__fma(p.x, cs.x, p.z * cs.y),
 					   p.y,
-					   SFM::__fma(p.x, cs.y, p.z * cs.x), 0.0f));
+					   SFM::__fma(p.x, -cs.y, p.z * cs.x), 0.0f));
 }
 STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_yaw(FXMVECTOR const xmP, v2_rotation_t const angle)
 {
 	return(v3_rotate_yaw(xmP, angle.v2()));
 }
 
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xmP, FXMVECTOR const xmCS)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, FXMVECTOR const xmCS)
 {
 	XMFLOAT3A p;
 	XMFLOAT2A cs;
 	XMStoreFloat3A(&p, xmP);
 	XMStoreFloat2A(&cs, xmCS);
 
-	// rotate point ( Pitch = Z Axis )
-	// xmAxis.r[0] = XMVectorSet( c,  s, 0.0f, 1.0f );
-	// xmAxis.r[1] = XMVectorSet(-s, c, 0.0f, 1.0f);
-	return(XMVectorSet(SFM::__fma(p.x, cs.x, p.y * cs.y),
-					   SFM::__fma(p.x, -cs.y, p.y * cs.x),
+	// rotate point ( Roll = Z Axis )
+	// xmAxis.r[0] = XMVectorSet( c,  -s, 0.0f, 1.0f );
+	// xmAxis.r[1] = XMVectorSet(s, c, 0.0f, 1.0f);
+	return(XMVectorSet(SFM::__fms(p.x, cs.x, p.y * cs.y),
+					   SFM::__fma(p.x, cs.y, p.y * cs.x),
 					   p.z, 0.0f));
 }
-STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_pitch(FXMVECTOR const xmP, v2_rotation_t const angle)
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate_roll(FXMVECTOR const xmP, v2_rotation_t const angle)
 {
-	return(v3_rotate_pitch(xmP, angle.v2()));
+	return(v3_rotate_roll(xmP, angle.v2()));
 }
 
 

@@ -39,7 +39,7 @@ eg.) in rng.c file:                                       *(only one C file)
 
 NO_INLINE void InitializeRandomNumberGenerators(uint64_t const deterministic_seed = 0); // optional parameter for setting/loading the master seed
 uint64_t const GetSecureSeed();
-void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Hash & Psuedo RNG functions *only*
+void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed for the Psuedo RNG functions *only*  ***this only changes the psuedo random number generator seed***
 void SetSeed(int32_t Seed); // 32 bit seeds are ok, but 64 bit seeds are better
 
 // These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
@@ -52,9 +52,9 @@ bool const PsuedoRandom5050(void);
 #define PsuedoRandomNumber PsuedoRandomNumber64	// default
 
 
-// These are hashing 64bit & 32bit values directly, deterministic by using SetSeed()
-uint64_t const Hash(int64_t const data);
-uint32_t const Hash(int32_t const data);
+// These are hashing 64bit & 32bit values directly, deterministic by using default program seed or custom seed (optional)
+uint64_t const Hash(int64_t const data, uint64_t const hashSeed = 0); /// *** to seed a *hash* with a specific value, supply optional parameter
+uint32_t const Hash(int32_t const data, uint32_t const hashSeed = 0); // otherwise the default program hash seed is used
 
 // for randomdly shuffling a std::vector or similar
 template<typename RandomIt>
@@ -113,15 +113,6 @@ std::array<float, NUM_SAMPLES> const GenerateVanDerCoruptSequence()
 	return(samples);
 }
 
-[[deprecated]] static __inline void HashSetSeed(int64_t Seed) // for backwards compatibility
-{
-	SetSeed(Seed);
-}
-[[deprecated]] static __inline void HashSetSeed(int32_t Seed) // for backwards compatibility
-{
-	SetSeed(Seed);
-}
-
 /// ############# IMPL #################### //
 #ifdef RANDOM_IMPLEMENTATION
 
@@ -162,15 +153,15 @@ static constexpr uint64_t const XORSHIFT_STATE_RESET[4] = { 0x00000000000000D1,0
 
 typedef struct alignas(32) sRandom /* this structure is constinit optimized, don't touch */
 {
-	__m256i xorshift_state;
+	__m256i xorshift_state;			// should not be changed externally, but can change as Psuedo Random Numbers are requested.
 
-	__m256i reserved_xorshift_state;	
+	__m256i reserved_xorshift_state;// should never be changed externally	
 
-	uint64_t reservedSeed;			
+	uint64_t reservedSeed;			// should never be changed externally
 
-	uint64_t hashSeed;
+	uint64_t hashSeed;				// should not be changed externally
 	
-	bool Initialized;
+	bool Initialized;				// should not be changed externally, is updated internally and indicates per thread local initialization state.
 
 } Random;
 
@@ -359,7 +350,7 @@ h32 *= PRIME32_3;
 h32 ^= h32 >> 16;
 return h32;
 }*/
-uint64_t const Hash(int64_t const data)
+uint64_t const Hash(int64_t const data, uint64_t const hashSeed)
 {
 	[[unlikely]] if (!oRandom.Initialized) {
 		InitializeRandomNumberGeneratorInstance();
@@ -370,7 +361,7 @@ uint64_t const Hash(int64_t const data)
 	static constexpr uint64_t const PRIME64_4 = 0x27D4EB2F165667C5ULL;
 	static constexpr uint64_t const PRIME64_5 = 0x165667B19E3779F9ULL;
 
-	uint64_t h64 = (uint64_t)oRandom.hashSeed + PRIME64_5;
+	uint64_t h64 = (uint64_t)(oRandom.hashSeed + hashSeed) + PRIME64_5;  // overflow ok, as long as were consistent
 	h64 += 4U;
 	h64 += (uint64_t)data * PRIME64_3;
 	h64 = uint64_t(_rotl64(h64, 17 << 1)) * PRIME64_4;
@@ -382,7 +373,7 @@ uint64_t const Hash(int64_t const data)
 
 	return(h64);
 }
-uint32_t const Hash(int32_t const data)
+uint32_t const Hash(int32_t const data, uint32_t const hashSeed)
 {
 	[[unlikely]] if (!oRandom.Initialized) {
 		InitializeRandomNumberGeneratorInstance();
@@ -393,7 +384,7 @@ uint32_t const Hash(int32_t const data)
 	static constexpr uint32_t const PRIME32_4 = 0x27D4EB2FU;
 	static constexpr uint32_t const PRIME32_5 = 0x165667B1U;
 
-	uint32_t h32 = (uint32_t)oRandom.hashSeed + PRIME32_5;
+	uint32_t h32 = (uint32_t)(oRandom.hashSeed + hashSeed) + PRIME32_5;  // overflow ok, as long as were consistent
 	h32 += 4U;
 	h32 += (uint32_t)data * PRIME32_3;
 	h32 = uint32_t(_rotl(h32, 17)) * PRIME32_4;
