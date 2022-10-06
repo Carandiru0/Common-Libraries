@@ -194,31 +194,6 @@ void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE)  ** image must be square (width == height)
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) ** image must be square (width == height)
 
-// BGRX in - BGR out
-void __vectorcall Parallel_BGRX2BGR(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,
-					   int const& xSize, int const& ySize);
-// BGR in - BGRX out
-void __vectorcall Parallel_BGR2BGRX(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,
-					   int const& xSize, int const& ySize);
-
-// L in - BGR out
-void __vectorcall Parallel_Gray2BGR(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,
-						int const& xSize, int const& ySize);
-// L in - BGRX out
-void __vectorcall Parallel_Gray2BGRX(uint8_t* const* const __restrict& __restrict pDst, uint8_t const* const* const __restrict& __restrict pSrc,
-						int const& xSize, int const& ySize);
-
-// BGR in - BGRX out
-void __vectorcall Parallel_GrayBGRXReduction(uint8_t* const* const  __restrict& pDst, uint8_t const* const* const __restrict& pSrc,
-							    int const& xSize, int const& ySize, double const& dLevels,
-							    uint8_t const(&__restrict rLUT)[256]);
-
-// BGR in - BGR out
-void __vectorcall Parallel_BrightnessContrast(uint8_t* const* const  __restrict& pDst, uint8_t const* const* const __restrict& pSrc, 
-								 int const& xSize, int const& ySize,
-								 double const& BrightFactor, double const& ContrastFactor);
-
-
 // PALETTE GENERAL // 
 
 // **** xmRGB should be converted to linear space range  b4 call to this function
@@ -268,9 +243,11 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring
 // RAW COPY 
 void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage);
 
-// CONVERS?ION //
+// CONVERSION //
 void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im); // Red and Blue component swap (INPLACE)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA); // (NOT INPLACE)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBGRXToL(ImagingMemoryInstance const* const __restrict pSrcImageBGRX); // (NOT INPLACE)   // **** uses tbb (parallel) ****
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageL); // (NOT INPLACE)      // **** uses tbb (parallel) ****
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA); // (NOT INPLACE)
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);

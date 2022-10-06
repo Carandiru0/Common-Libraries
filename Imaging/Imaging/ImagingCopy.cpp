@@ -1423,7 +1423,67 @@ void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
 	}
 }
 
-ImagingMemoryInstance* const __restrict __vectorcall ImagingMakeLAFromLL(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBGRXToL(ImagingMemoryInstance const* const __restrict pSrcImageBGRX)
+{
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L, pSrcImageBGRX->xsize, pSrcImageBGRX->ysize);
+
+	struct { // avoid lambda heap
+		uint8_t const* const* const __restrict image_in;
+		uint8_t* const* const __restrict       image_out;
+		int const size;
+
+	} const p = { pSrcImageBGRX->image, imageL->image, imageL->xsize };
+
+
+	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
+
+		int x = p.size - 1;
+		uint8_t const* __restrict pIn(p.image_in[y]);
+		uint8_t* __restrict pOut(p.image_out[y]);
+		do {
+
+			*pOut = 0xff & (*reinterpret_cast<uint32_t const* const>(pIn));
+
+			++pOut;
+			pIn += 4;
+
+		} while (--x >= 0);
+
+	});
+
+	return(imageL);
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageL)
+{
+	ImagingMemoryInstance* const __restrict imageBGRX = ImagingNew(eIMAGINGMODE::MODE_BGRX, pSrcImageL->xsize, pSrcImageL->ysize);
+
+	struct { // avoid lambda heap
+		uint8_t const* const* const __restrict image_in;
+		uint8_t* const* const __restrict       image_out;
+		int const size;
+
+	} const p = { pSrcImageL->image, imageBGRX->image, imageBGRX->xsize };
+
+
+	tbb::parallel_for(int(0), imageBGRX->ysize, [&p](int const y) {
+
+		int x = p.size - 1;
+		uint8_t const* __restrict pIn(p.image_in[y]);
+		uint8_t* __restrict pOut(p.image_out[y]);
+		do {
+
+			*reinterpret_cast<uint32_t* const>(pOut) = SFM::pack_rgba(*pIn);
+
+			pOut += 4;
+			++pIn;
+
+		} while (--x >= 0);
+
+		});
+
+	return(imageBGRX);
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
 {
 	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);
 

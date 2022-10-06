@@ -1281,18 +1281,15 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 	STATIC_INLINE_PURE uvec4_v const __vectorcall blend(uvec4_v const A, uvec4_v const B)
 	{
-		__m128i const xm255(_mm_set1_epi32(255U));
 		__m128i const alpha_A(_mm_set1_epi32(A.a()));
 		__m128i const alpha_B(_mm_set1_epi32(255U - A.a()));
 		
-		return(uvec4_v(_mm_div_epu32( _mm_add_epi32(_mm_mullo_epi32(A.v, alpha_A), _mm_mullo_epi32(B.v, alpha_B)), xm255)));		// SSE4.2 req for _mm_mullo_epi32
+		return(uvec4_v(_mm_srli_epi32( _mm_add_epi32(_mm_mullo_epi32(A.v, alpha_A), _mm_mullo_epi32(B.v, alpha_B)), 8)));		// SSE4.2 req for _mm_mullo_epi32  *bugfix removed horrible integer division in favor of simple right shift. note that this divides the result by 256 rather than 255 so there is 1 unit of precision loss. The speedup is required as this is frequently used during .GIF animations between frames and per pixel (Order n^3) * division cost. This was slowing it down greatly.
 	}
 
 	STATIC_INLINE_PURE uvec4_v const __vectorcall modulate(uvec4_v const A, uvec4_v const B)
 	{
-		__m128i const xm255(_mm_set1_epi32(255U));
-
-		return(uvec4_v(_mm_div_epu32(_mm_mullo_epi32(A.v, B.v), xm255)));		// SSE4.2 req for _mm_mullo_epi32
+		return(uvec4_v(_mm_srli_epi32(_mm_mullo_epi32(A.v, B.v), 8)));		// SSE4.2 req for _mm_mullo_epi32  *bugfix removed horrible integer division in favor of simple right shift. note that this divides the result by 256 rather than 255 so there is 1 unit of precision loss. The speedup is required as this is frequently used during .GIF animations between frames and per pixel (Order n^3) * division cost. This was slowing it down greatly.
 	}
 	//STATIC_INLINE_PURE uint32_t const __vectorcall blend(uint8_t const A, uint8_t const B, uint8_t const weight)
 	//{
