@@ -239,12 +239,20 @@ typedef union alignas(16) rect2D
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_add(rect2D_t const rect, point2D_t const origin) {
 	return (rect2D_t(p2D_add(rect.left_top(), origin), p2D_add(rect.right_bottom(), origin)));
 }
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_sub(rect2D_t const a, rect2D_t const b) {
+	return (rect2D_t(p2D_sub(a.left_top(), b.left_top()), p2D_sub(a.right_bottom(), b.right_bottom())));
+}
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_sub(rect2D_t const rect, point2D_t const origin) {
 	return (rect2D_t(p2D_sub(rect.left_top(), origin), p2D_sub(rect.right_bottom(), origin)));
 }
-
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_min(rect2D_t const a, rect2D_t const b) {
+	return(rect2D_t(_mm_min_epi32(a.v, b.v)));
+}
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_min(rect2D_t const a, int32_t const b) {
 	return(rect2D_t(_mm_min_epi32(a.v, _mm_set1_epi32(b))));
+}
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_max(rect2D_t const a, rect2D_t const b) {
+	return(rect2D_t(_mm_max_epi32(a.v, b.v)));
 }
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_max(rect2D_t const a, int32_t const b) {
 	return(rect2D_t(_mm_max_epi32(a.v, _mm_set1_epi32(b))));

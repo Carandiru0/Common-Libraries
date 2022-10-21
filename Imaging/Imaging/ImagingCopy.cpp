@@ -141,16 +141,14 @@ ImagingNewEpilogue(ImagingMemoryInstance* const __restrict im)
 		return (Imaging)ImagingError_MemoryError();
 
 	/* Initialize alias pointers to pixel data. */
-	if (IMAGING_TYPE_UINT8 != im->type) {
-		switch (im->pixelsize) {
-		case 1:
-			im->image8 = (uint8_t**)im->image;
-			break;
-		case 2:
-		case 4:
-			im->image32 = (uint32_t**)im->image;
-			break;
-		}
+	switch (im->pixelsize) {
+	case 1: case 3:
+		im->image8 = (uint8_t**)im->image;
+		break;
+	case 2:
+	case 4:
+		im->image32 = (uint32_t**)im->image;
+		break;
 	}
 
 	return(im);
@@ -526,6 +524,36 @@ void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im)
 			ucolor.rgba(rgba);
 
 			block[pixel] = SFM::pack_rgba(rgba.r, rgba.g, rgba.b, rgba.a);
+		}
+	}
+}
+
+// overwrites input
+void __vectorcall ImagingLerpL16(ImagingMemoryInstance* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT)
+{
+	uint32_t const height(B->ysize);
+	uint32_t const width(B->xsize);
+
+	uint16_t* const __restrict blockA(reinterpret_cast<uint16_t* const>(A->block));
+	uint16_t const* const __restrict blockB(reinterpret_cast<uint16_t const* const>(B->block));
+
+	static constexpr float const NORMALIZE = 1.0f / float(UINT16_MAX);
+	static constexpr float const DENORMALIZE = float(UINT16_MAX);
+
+	for (uint32_t y = 0; y < height; ++y) {
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			uint32_t const pixel(y * width + x);
+
+			uint32_t const bA(blockA[pixel]),
+				           bB(blockB[pixel]);
+
+			float const fA(((float)bA) * NORMALIZE),
+				        fB(((float)bB) * NORMALIZE);
+
+			// floating point precision is best in [0.0f ... 1.0f] range, so normalizing before lerp then denormalization after is a huge benefit
+			blockA[pixel] = SFM::saturate_to_u16(DENORMALIZE * SFM::lerp(fA, fB, tT));
 		}
 	}
 }
@@ -1373,6 +1401,71 @@ void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
 			block[pixel] = SFM::pack_rgba(rgba_dst.b, rgba_dst.g, rgba_dst.r, rgba_dst.a);
 		}
 	}
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_8To16(ImagingMemoryInstance const* const __restrict pSrcImage)
+{
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L16, pSrcImage->xsize, pSrcImage->ysize);
+
+	struct { // avoid lambda heap
+		uint8_t const* const* const __restrict image_in;
+		uint16_t* const* const __restrict       image_out;
+		int const size;
+
+	} const p = { (uint8_t**)pSrcImage->image, (uint16_t**)imageL->image32, imageL->xsize };
+
+
+	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
+
+		int x = p.size - 1;
+		uint8_t const* __restrict pIn(p.image_in[y]);
+		uint16_t* __restrict pOut(p.image_out[y]);
+		do {
+
+			uint32_t value = 0xffu & *pIn;
+
+			*pOut = (value << 8u);
+
+			++pOut;
+			++pIn;
+
+		} while (--x >= 0);
+
+		});
+
+	return(imageL);
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To8(ImagingMemoryInstance const* const __restrict pSrcImage)
+{
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L, pSrcImage->xsize, pSrcImage->ysize);
+
+	struct { // avoid lambda heap
+		uint16_t const* const* const __restrict image_in;
+		uint8_t* const* const __restrict       image_out;
+		int const size;
+
+	} const p = { (uint16_t**)pSrcImage->image32, (uint8_t**)imageL->image, imageL->xsize };
+
+
+	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
+
+		int x = p.size - 1;
+		uint16_t const* __restrict pIn(p.image_in[y]);
+		uint8_t* __restrict pOut(p.image_out[y]);
+		do {
+
+			uint32_t value = *pIn;
+
+			*pOut = 0xffu & (value >> 8u);
+
+			++pOut;
+			++pIn;
+
+		} while (--x >= 0);
+
+		});
+
+	return(imageL);
 }
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To32(ImagingMemoryInstance const* const __restrict pSrcImage)

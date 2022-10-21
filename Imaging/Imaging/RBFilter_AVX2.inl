@@ -1027,9 +1027,6 @@ bool const CRBFilterAVX2<edge_detection, thread_count>::filter(unsigned char* __
 	if (height < 16 || height > m_reserved_height)
 		return false;
 
-	if (pitch < width * 4)
-		return false;
-
 	if (!out_data || !in_data)
 		return false;
 

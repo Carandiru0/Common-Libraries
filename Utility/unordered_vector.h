@@ -18,7 +18,7 @@ template<typename T, typename Allocator = tbb::scalable_allocator<T>>
 class unordered_vector : public std::vector<T, Allocator>
 {
 public:
-	auto const const remove(iterator const& it)	// efficient removal and erasure of singular element : https://stackoverflow.com/questions/39912/how-do-i-remove-an-item-from-a-stl-vector-with-a-certain-value
+	auto const remove(unordered_vector<T>::iterator& it)	// efficient removal and erasure of singular element : https://stackoverflow.com/questions/39912/how-do-i-remove-an-item-from-a-stl-vector-with-a-certain-value
 	{
 		if (this->end() != it) {
 
