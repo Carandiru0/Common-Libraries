@@ -24,7 +24,7 @@
 /* --------------------------------------------------------------------
 * Standard image object.
 */
-static constexpr int64_t const IMAGE_SIZE_THRESHOLD(16384ull * 16384ull + 1ull);	// max loaded file image size, resampling can only goto a maximum of 16384x16384
+static constexpr int64_t const IMAGE_SIZE_THRESHOLD(16384ull * 16384ull * 4ull);	// max loaded file image size, resampling can only goto a maximum of 16384x16384
 static constexpr int32_t const MAX_LUT_DIMENSION_SIZE(65 + 1);						// maximum lut dimension n x n x n
 
 static ImagingMemoryInstance* const __restrict
@@ -59,21 +59,27 @@ ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ys
 		/* 8-bit greyscale (luminance) images */
 		im->bands = im->pixelsize = 1;
 		break;
+	case MODE_L16:
+		/* 16-bit greyscale (luminance) images */
+		im->bands = 1;
+		im->pixelsize = 2;
+		im->type = IMAGING_TYPE_INT32;
+		break;
 	case MODE_LA:
 		/* 8-bit greyscale (luminance) with alpha */
 		im->bands = im->pixelsize = 2;
+		break;
+	case MODE_LA16:
+		/* 16-bit greyscale (luminance) with 16bit alpha */
+		im->bands = 2;
+		im->pixelsize = 4;
+		im->type = IMAGING_TYPE_INT32;
 		break;
 	case MODE_I:
 		/* 32-bit integer images */
 		im->bands = 1;
 		im->pixelsize = 4;
 		im->type = IMAGING_TYPE_INT32;
-		break;
-	case MODE_F:
-		/* 32-bit floating point images */
-		im->bands = 1;
-		im->pixelsize = 4;
-		im->type = IMAGING_TYPE_FLOAT32;
 		break;
 	case MODE_RGB:
 		/* 24-bit true colour images */
@@ -88,27 +94,6 @@ ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ys
 	case MODE_BGRA:
 		/* 32-bit true colour images with alpha */
 		im->bands = im->pixelsize = 4;
-		break;
-	case MODE_CMYK:
-		/* 32-bit colour separation */
-		im->bands = im->pixelsize = 4;
-		break;
-	case MODE_YCbCr:
-		/* 24-bit video format */
-		im->bands = 3;
-		im->pixelsize = 4;
-		break;
-	case MODE_LAB:
-		/* 24-bit color, luminance, + 2 color channels */
-		/* L is uint8, a,b are int8 */
-		im->bands = 3;
-		im->pixelsize = 4;
-		break;
-	case MODE_HSV:
-		/* 24-bit color, luminance, + 2 color channels */
-		/* L is uint8, a,b are int8 */
-		im->bands = 3;
-		im->pixelsize = 4;
 		break;
 	case MODE_BC7:
 	case MODE_BC6A:
@@ -156,13 +141,16 @@ ImagingNewEpilogue(ImagingMemoryInstance* const __restrict im)
 		return (Imaging)ImagingError_MemoryError();
 
 	/* Initialize alias pointers to pixel data. */
-	switch (im->pixelsize) {
-	case 1: case 2: case 3:
-		im->image8 = (uint8_t **)im->image;
-		break;
-	case 4:
-		im->image32 = (int32_t **)im->image;
-		break;
+	if (IMAGING_TYPE_UINT8 != im->type) {
+		switch (im->pixelsize) {
+		case 1:
+			im->image8 = (uint8_t**)im->image;
+			break;
+		case 2:
+		case 4:
+			im->image32 = (uint32_t**)im->image;
+			break;
+		}
 	}
 
 	return(im);
@@ -280,7 +268,7 @@ static void ImagingDestroyBlock_LUT(ImagingLUT* const __restrict im)
 }
 
 static ImagingMemoryInstance* const __restrict __vectorcall
-ImagingNewBlock(eIMAGINGMODE const mode, int const xsize, int const ysize, int const BufferSize = 0)
+ImagingNewBlock(eIMAGINGMODE const mode, int const xsize, int const ysize)
 {
 	Imaging im;
 	size_t y, i;
@@ -306,30 +294,15 @@ ImagingNewBlock(eIMAGINGMODE const mode, int const xsize, int const ysize, int c
 		im->block = (uint8_t *)scalable_malloc(1);
 	}
 	else {
-		/* malloc check ok, overflow check above */
-		if (0 != BufferSize) {
-			im->block = (uint8_t *)scalable_malloc(BufferSize);
+		im->block = (uint8_t *)scalable_malloc(im->ysize * im->linesize);
 
-			// alias pointers are only valid for buffersize that is 
+		if (im->block) {		// alias pointers are only valid for buffersize that is 
 			// composed of stritcly ysize * linesize = blocksize
 			// ie.) Compressed BC7 & BC6A do not have alias pointers
-			scalable_free(im->image);
-
-			im->image = nullptr;
-			im->image8 = nullptr;
-			im->image32 = nullptr;
-		}
-		else {
-			im->block = (uint8_t *)scalable_malloc(im->ysize * im->linesize);
-
-			if (im->block) {		// alias pointers are only valid for buffersize that is 
-									// composed of stritcly ysize * linesize = blocksize
-									// ie.) Compressed BC7 & BC6A do not have alias pointers
-				// map alias lines to block memory
-				for (y = i = 0; y < im->ysize; ++y) {
-					im->image[y] = im->block + i;
-					i += im->linesize;
-				}
+// map alias lines to block memory
+			for (y = i = 0; y < im->ysize; ++y) {
+				im->image[y] = im->block + i;
+				i += im->linesize;
 			}
 		}
 	}
@@ -417,7 +390,7 @@ static ImagingMemoryInstance* const __restrict __vectorcall
 _copy(ImagingMemoryInstance const * const __restrict imIn)
 {
     if (!imIn)
-	return (Imaging) ImagingError_ValueError(NULL);
+		return (Imaging)ImagingError_ValueError(NULL);
 
 	ImagingMemoryInstance* __restrict imOut = ImagingNew(imIn->mode, imIn->xsize, imIn->ysize);
     if (!imOut)
@@ -464,9 +437,6 @@ ImagingCopy(ImagingLUT const* const __restrict lutIn)
 void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im)	// (INPLACE) key[ 0x00b140 ] - for best results this function should be used earliest in the pipeline before any image alteration are made like dithering, etc.
 {																				//                           - this function specifies the exact color key to use, but compensates for +-1 in differences.
 	static constexpr uint32_t const color_key(0x0040b100);	// abgr
-
-	uint32_t const height(im->ysize);
-	uint32_t const width(im->xsize);
 
 	uint32_t* __restrict block(reinterpret_cast<uint32_t*>(im->block));
 	uvec4_t rgba{};
@@ -729,8 +699,6 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemo
 	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
 	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
 
-	uvec4_t rgba_dst{}, rgba_src{};
-
 	for (uint32_t y = 0; y < height; ++y) {
 
 		for (uint32_t x = 0; x < width; ++x) {
@@ -750,8 +718,6 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMem
 
 	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
 	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
-
-	uvec4_t rgba_dst{}, rgba_src{};
 
 	for (uint32_t y = 0; y < height; ++y) {
 
@@ -793,72 +759,60 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wst
 {
 	return(ImagingLoadRaw(MODE_BGRA, filenamepath, width, height));
 }
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height)
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height)
 {
-	return(ImagingLoadRaw(MODE_L, filenamepath, width, height));
+	return(ImagingLoadRaw(MODE_LA16, filenamepath, width, height));
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL16(std::wstring_view const filenamepath, int const width, int const height)
+{
+	return(ImagingLoadRaw(MODE_L16, filenamepath, width, height));
 }
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height)
 {
 	return(ImagingLoadRaw(MODE_LA, filenamepath, width, height));
 }
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height)
+{
+	return(ImagingLoadRaw(MODE_L, filenamepath, width, height));
+}
+
+STATIC_INLINE_PURE ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemory(Imaging&& __restrict returnL, uint8_t const* __restrict pMemLoad)
+{
+	uint8_t* __restrict pOut = returnL->block;
+	uint32_t const stride = returnL->linesize;
+
+	uint32_t scanline(returnL->ysize);
+	while (0 != scanline) {
+
+		memcpy(pOut, pMemLoad, stride);
+		pMemLoad += stride;
+		pOut += stride;
+
+		--scanline;
+	}
+
+	return(returnL);
+}
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height)
 {
-	Imaging returnL(ImagingNew(MODE_BGRA, width, height));
-
-	uint8_t*  __restrict pOut = returnL->block;
-	uint32_t const stride = returnL->linesize;
-
-	uint32_t scanline(height);
-	while ( 0 != scanline ) {
-
-		memcpy(pOut, pMemLoad, stride);
-		pMemLoad += stride;
-		pOut += stride;
-
-		--scanline;
-	}
-
-	return(returnL);
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_BGRA, width, height)), pMemLoad));
 }
-
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA16(uint8_t const* __restrict pMemLoad, int const width, int const height)
+{
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_LA16, width, height)), pMemLoad));
+}
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height)
 {
-	Imaging returnL(ImagingNew(MODE_LA, width, height));
-
-	uint8_t* __restrict pOut = returnL->block;
-	uint32_t const stride = returnL->linesize;
-
-	uint32_t scanline(height);
-	while (0 != scanline) {
-
-		memcpy(pOut, pMemLoad, stride);
-		pMemLoad += stride;
-		pOut += stride;
-
-		--scanline;
-	}
-
-	return(returnL);
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_LA, width, height)), pMemLoad));
 }
-
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL16(uint8_t const* __restrict pMemLoad, int const width, int const height)
+{
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_L16, width, height)), pMemLoad));
+}
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height)
 {
-	Imaging returnL(ImagingNew(MODE_L, width, height));
-
-	uint8_t* __restrict pOut = returnL->block;
-	uint32_t const stride = returnL->linesize;
-
-	uint32_t scanline(height);
-	while (0 != scanline) {
-
-		memcpy(pOut, pMemLoad, stride);
-		pMemLoad += stride;
-		pOut += stride;
-
-		--scanline;
-	}
-
-	return(returnL);
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_L, width, height)), pMemLoad));
 }
 
 #if INCLUDE_PNG_SUPPORT
@@ -1386,8 +1340,6 @@ ImagingLUT* const __restrict __vectorcall ImagingLoadLUT(std::wstring_view const
 
 void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance const* const __restrict pSrcImage)
 {
-	bool bReturn(false);
-
 	uint8_t* __restrict pOut(reinterpret_cast<uint8_t* const __restrict>(pDstMemory));
 	uint8_t const * __restrict pIn(pSrcImage->block);
 	uint32_t const stride = pSrcImage->linesize;
@@ -1423,29 +1375,31 @@ void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
 	}
 }
 
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBGRXToL(ImagingMemoryInstance const* const __restrict pSrcImageBGRX)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To32(ImagingMemoryInstance const* const __restrict pSrcImage)
 {
-	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L, pSrcImageBGRX->xsize, pSrcImageBGRX->ysize);
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_I, pSrcImage->xsize, pSrcImage->ysize);
 
 	struct { // avoid lambda heap
-		uint8_t const* const* const __restrict image_in;
-		uint8_t* const* const __restrict       image_out;
+		uint16_t const* const* const __restrict image_in;
+		uint32_t* const* const __restrict       image_out;
 		int const size;
 
-	} const p = { pSrcImageBGRX->image, imageL->image, imageL->xsize };
+	} const p = { (uint16_t**)pSrcImage->image32, (uint32_t**)imageL->image32, imageL->xsize };
 
 
 	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
 
 		int x = p.size - 1;
-		uint8_t const* __restrict pIn(p.image_in[y]);
-		uint8_t* __restrict pOut(p.image_out[y]);
+		uint16_t const* __restrict pIn(p.image_in[y]);
+		uint32_t* __restrict pOut(p.image_out[y]);
 		do {
 
-			*pOut = 0xff & (*reinterpret_cast<uint32_t const* const>(pIn));
+			uint32_t value = 0xffffu & *pIn;
+
+			*pOut = (value << 16u);
 
 			++pOut;
-			pIn += 4;
+			++pIn;
 
 		} while (--x >= 0);
 
@@ -1453,36 +1407,39 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingBGRXToL(ImagingMemor
 
 	return(imageL);
 }
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageL)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_32To16(ImagingMemoryInstance const* const __restrict pSrcImage)
 {
-	ImagingMemoryInstance* const __restrict imageBGRX = ImagingNew(eIMAGINGMODE::MODE_BGRX, pSrcImageL->xsize, pSrcImageL->ysize);
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L16, pSrcImage->xsize, pSrcImage->ysize);
 
 	struct { // avoid lambda heap
-		uint8_t const* const* const __restrict image_in;
-		uint8_t* const* const __restrict       image_out;
+		uint32_t const* const* const __restrict image_in;
+		uint16_t* const* const __restrict       image_out;
 		int const size;
 
-	} const p = { pSrcImageL->image, imageBGRX->image, imageBGRX->xsize };
+	} const p = { (uint32_t**)pSrcImage->image32, (uint16_t**)imageL->image32, imageL->xsize };
 
 
-	tbb::parallel_for(int(0), imageBGRX->ysize, [&p](int const y) {
+	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
 
 		int x = p.size - 1;
-		uint8_t const* __restrict pIn(p.image_in[y]);
-		uint8_t* __restrict pOut(p.image_out[y]);
+		uint32_t const* __restrict pIn(p.image_in[y]);
+		uint16_t* __restrict pOut(p.image_out[y]);
 		do {
 
-			*reinterpret_cast<uint32_t* const>(pOut) = SFM::pack_rgba(*pIn);
+			uint32_t value = *pIn;
 
-			pOut += 4;
+			*pOut = 0xffffu & (value >> 16u);
+
+			++pOut;
 			++pIn;
 
 		} while (--x >= 0);
 
 		});
 
-	return(imageBGRX);
+	return(imageL);
 }
+
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
 {
 	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);
@@ -1878,6 +1835,8 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 	//internal format
 	static constexpr uint32_t const KTX_R8 = 0x8229;
 	static constexpr uint32_t const KTX_RG8 = 0x822B;
+	static constexpr uint32_t const KTX_R16 = 0x822A;
+	static constexpr uint32_t const KTX_RG16 = 0x822C;
 	static constexpr uint32_t const KTX_RGBA8 = 0x8058;
 
 	//base internal format
@@ -1885,6 +1844,7 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 	static constexpr uint32_t const KTX__RG = 0x8227;
 	static constexpr uint32_t const KTX__RGBA = 0x1908;
 	
+	static constexpr uint32_t const KTX_UNSIGNED_SHORT = 0x1403;
 	static constexpr uint32_t const KTX_UNSIGNED_BYTE = 0x1401;
 	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
 
@@ -1896,13 +1856,18 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 
 	FILE* fOut;
 
-	if (((MODE_L|MODE_LA|MODE_BGRX|MODE_BGRA) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (((MODE_L|MODE_LA|MODE_L16|MODE_LA16|MODE_BGRX|MODE_BGRA) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
 	{
 		KtxHeader header = {};
 		memcpy(header.identifier, ktx_magic_id, 12);
 
 		header.endianness = KTX_ENDIAN_REF;
-		header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
+
+		if ((MODE_L16 | MODE_LA16) & pSrcImage->mode)
+			header.glType = KTX_UNSIGNED_SHORT; //  For compressed formats, type=0.
+		else
+			header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
+
 		header.glTypeSize = pSrcImage->pixelsize;
 
 		switch (pSrcImage->mode)
@@ -1914,6 +1879,14 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 		case MODE_LA:
 			header.glFormat = header.glBaseInternalFormat = KTX__RG;
 			header.glInternalFormat = KTX_RG8;
+			break;
+		case MODE_L16:
+			header.glFormat = header.glBaseInternalFormat = KTX__R;
+			header.glInternalFormat = KTX_R16;
+			break;
+		case MODE_LA16:
+			header.glFormat = header.glBaseInternalFormat = KTX__RG;
+			header.glInternalFormat = KTX_RG16;
 			break;
 		case MODE_BGRA:
 		case MODE_BGRX:
@@ -1962,6 +1935,8 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	//internal format
 	static constexpr uint32_t const KTX_R8 = 0x8229;
 	static constexpr uint32_t const KTX_RG8 = 0x822B;
+	static constexpr uint32_t const KTX_R16 = 0x822A;
+	static constexpr uint32_t const KTX_RG16 = 0x822C;
 	static constexpr uint32_t const KTX_RGBA8 = 0x8058;
 
 	//base internal format
@@ -1969,6 +1944,7 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	static constexpr uint32_t const KTX__RG = 0x8227;
 	static constexpr uint32_t const KTX__RGBA = 0x1908;
 
+	static constexpr uint32_t const KTX_UNSIGNED_SHORT = 0x1403;
 	static constexpr uint32_t const KTX_UNSIGNED_BYTE = 0x1401;
 	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
 
@@ -1982,10 +1958,15 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	KtxHeader header = {};
 	memcpy(header.identifier, ktx_magic_id, 12);
 
-	if (((MODE_L | MODE_LA | MODE_BGRX | MODE_BGRA) & pSrcImages[0]->mode))
+	if (((MODE_L | MODE_LA | MODE_L16 | MODE_LA16 | MODE_BGRX | MODE_BGRA) & pSrcImages[0]->mode))
 	{
 		header.endianness = KTX_ENDIAN_REF;
-		header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
+
+		if ((MODE_L16 | MODE_LA16) & pSrcImages[0]->mode)
+			header.glType = KTX_UNSIGNED_SHORT; //  For compressed formats, type=0.
+		else
+			header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
+
 		header.glTypeSize = pSrcImages[0]->pixelsize;
 
 		switch (pSrcImages[0]->mode)
@@ -1997,6 +1978,14 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 		case MODE_LA:
 			header.glFormat = header.glBaseInternalFormat = KTX__RG;
 			header.glInternalFormat = KTX_RG8;
+			break;
+		case MODE_L16:
+			header.glFormat = header.glBaseInternalFormat = KTX__R;
+			header.glInternalFormat = KTX_R16;
+			break;
+		case MODE_LA16:
+			header.glFormat = header.glBaseInternalFormat = KTX__RG;
+			header.glInternalFormat = KTX_RG16;
 			break;
 		case MODE_BGRA:
 		case MODE_BGRX:
@@ -2203,13 +2192,19 @@ namespace
 	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
 	inline eIMAGINGMODE const GLtoImagingMode(uint32_t const glFormat) {
 		switch (glFormat) {
-		case 0x8229: return MODE_L;
+		case 0x8229: return MODE_L; // GL_R8
 		case 0x1903: return MODE_L;
 		case 0x8FBD: return MODE_L;
 
-		case 0x822B: return MODE_LA;
+		case 0x822B: return MODE_LA; // GL_RG8
 		case 0x8227: return MODE_LA;
 		case 0x8FBE: return MODE_LA;
+
+		case 0x822A: return MODE_L16;   // GL_R16
+		case 0x8F98: return MODE_L16;   // GL_R16_SNORM
+
+		case 0x822C: return MODE_LA16;  // GL_RG16
+		case 0x8F99: return MODE_LA16;  // GL_RG16_SNORM
 
 		case 0x80E0: return MODE_RGB; // GL_BGR
 		case 0x8051: return MODE_RGB; // GL_RGB
@@ -2353,14 +2348,20 @@ namespace
 			if (0 == totalActualSize)
 				return(nullptr);
 
-			switch (format())
+			switch (format()) // only these image formats are supported natively for ktx
 			{
 			case MODE_BGRA:
 				return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(), height()));
+			case MODE_LA16:
+				return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(), height()));
 			case MODE_LA:
 				return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(), height()));
+			case MODE_L16:
+				return(ImagingLoadFromMemoryL16(pFileBegin + offset(0, 0, 0), width(), height()));
 			case MODE_L:
 				return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(), height()));
+			default:
+				break;
 			}
 			
 			return(nullptr);

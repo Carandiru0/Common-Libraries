@@ -161,7 +161,7 @@ precompute_coeffs(int const inSize, int const outSize, struct filter * const __r
     support = filterp->support * filterscale;
 
     /* maximum number of coeffs */
-    kmax = (int) ceil(support) * 2 + 1;
+    kmax = (int)SFM::ceil(support) * 2 + 1;
 
     // check for overflow
     if (outSize > INT32_MAX / (kmax * sizeof(double)))
@@ -418,8 +418,6 @@ ImagingResampleHorizontal_32bpc(ImagingMemoryInstance const* const __restrict im
 	}
 
 {
-	switch (imIn->type) {
-	case IMAGING_TYPE_INT32:
 		for (yy = 0; yy < imOut->ysize; yy++) {
 			for (xx = 0; xx < xsize; xx++) {
 				xmin = xbounds[xx * 2 + 0];
@@ -428,26 +426,9 @@ ImagingResampleHorizontal_32bpc(ImagingMemoryInstance const* const __restrict im
 				ss = 0.0;
 				for (x = 0; x < xmax; x++)
 					ss += IMAGING_PIXEL_I(imIn, x + xmin, yy) * k[x];
-				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32((float)ss);
+				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::round_to_u32(SFM::abs(ss));
 			}
 		}
-		break;
-
-	case IMAGING_TYPE_FLOAT32:
-		for (yy = 0; yy < imOut->ysize; yy++) {
-			for (xx = 0; xx < xsize; xx++) {
-				xmin = xbounds[xx * 2 + 0];
-				xmax = xbounds[xx * 2 + 1];
-				k = &kk[xx * kmax];
-				ss = 0.0;
-				for (x = 0; x < xmax; x++)
-					ss += IMAGING_PIXEL_F(imIn, x + xmin, yy) * k[x];
-				IMAGING_PIXEL_F(imOut, xx, yy) = (float)ss;
-			}
-		}
-		break;
-	}
-
 }
     scalable_free(kk);
     scalable_free(xbounds);
@@ -477,36 +458,17 @@ ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn
 	}
 
 {
-	switch (imIn->type) {
-	case IMAGING_TYPE_INT32:
-		for (yy = 0; yy < ysize; yy++) {
-			ymin = xbounds[yy * 2 + 0];
-			ymax = xbounds[yy * 2 + 1];
-			k = &kk[yy * kmax];
-			for (xx = 0; xx < imOut->xsize; xx++) {
-				ss = 0.0;
-				for (y = 0; y < ymax; y++)
-					ss += IMAGING_PIXEL_I(imIn, xx, y + ymin) * k[y];
-				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::ceil_to_i32((float)ss);
-			}
+	for (yy = 0; yy < ysize; yy++) {
+		ymin = xbounds[yy * 2 + 0];
+		ymax = xbounds[yy * 2 + 1];
+		k = &kk[yy * kmax];
+		for (xx = 0; xx < imOut->xsize; xx++) {
+			ss = 0.0;
+			for (y = 0; y < ymax; y++)
+				ss += IMAGING_PIXEL_I(imIn, xx, y + ymin) * k[y];
+			IMAGING_PIXEL_I(imOut, xx, yy) = SFM::round_to_u32(SFM::abs(ss));
 		}
-		break;
-
-	case IMAGING_TYPE_FLOAT32:
-		for (yy = 0; yy < ysize; yy++) {
-			ymin = xbounds[yy * 2 + 0];
-			ymax = xbounds[yy * 2 + 1];
-			k = &kk[yy * kmax];
-			for (xx = 0; xx < imOut->xsize; xx++) {
-				ss = 0.0;
-				for (y = 0; y < ymax; y++)
-					ss += IMAGING_PIXEL_F(imIn, xx, y + ymin) * k[y];
-				IMAGING_PIXEL_F(imOut, xx, yy) = (float)ss;
-			}
-		}
-		break;
 	}
-
 }
     scalable_free(kk);
     scalable_free(xbounds);
@@ -536,7 +498,6 @@ ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xs
                 ResampleVertical = ImagingResampleVertical_8bpc;
                 break;
             case IMAGING_TYPE_INT32:
-            case IMAGING_TYPE_FLOAT32:
                 ResampleHorizontal = ImagingResampleHorizontal_32bpc;
                 ResampleVertical = ImagingResampleVertical_32bpc;
                 break;

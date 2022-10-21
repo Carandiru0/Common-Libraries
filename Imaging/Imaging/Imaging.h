@@ -43,15 +43,16 @@
 enum eIMAGINGMODE
 {
 	MODE_1BIT = (1<<0),
-	MODE_L = (1<<1), MODE_LA = (1 << 2),
+	MODE_L = (1<<1), MODE_LA = (1<<2),
+	MODE_L16 = (1<<3), MODE_LA16 = (1<<4),
 	MODE_I = (1<<5),
-	MODE_F = (1<<6),
+	//MODE_F = (1<<6),
 	MODE_RGB = (1<<7),
 	MODE_BGRX = (1<<8), MODE_BGRA = (1 << 9),
-	MODE_CMYK = (1<<10),
-	MODE_YCbCr = (1 << 11),
-	MODE_LAB = (1 << 12),
-	MODE_HSV = (1 << 13),
+	//MODE_CMYK = (1<<10),
+	//MODE_YCbCr = (1 << 11),
+	//MODE_LAB = (1 << 12),
+	//MODE_HSV = (1 << 13),
 	MODE_BC7 = (1 << 14),
 	MODE_BC6A = (1 << 15),
 
@@ -61,8 +62,7 @@ enum eIMAGINGMODE
 /* pixel types */
 #define IMAGING_TYPE_UINT8 (1<<0)
 #define IMAGING_TYPE_INT32 (1<<1)
-#define IMAGING_TYPE_FLOAT32 (1<<2)
-#define IMAGING_TYPE_SPECIAL (1<<3)
+#define IMAGING_TYPE_SPECIAL (1<<2)
 
 #define IMAGING_TRANSFORM_NEAREST 0
 #define IMAGING_TRANSFORM_BOX 4
@@ -72,7 +72,7 @@ enum eIMAGINGMODE
 #define IMAGING_TRANSFORM_LANCZOS 1
 
 #define IMAGING_PIXEL_I(im,x,y) ((im)->image32[(y)][(x)])
-#define IMAGING_PIXEL_F(im,x,y) (((float*)(im)->image32[y])[x])
+
 /* Exceptions */
 /* ---------- */
 
@@ -97,8 +97,8 @@ struct ImagingMemoryInstance {
 	int32_t ysize;
 
 	/* Data pointers */
-	uint8_t ** __restrict image8;	/* Set for 8-bit images (pixelsize=1). */
-	int32_t ** __restrict image32;	/* Set for 32-bit images (pixelsize=4). */
+	uint8_t ** __restrict image8;	/* Set for 8-bit per component images (pixelsize=1). */
+	uint32_t ** __restrict image32;	/* Set for 32-bit per compoenent images (pixelsize=4). */
 
 						/* Internals */
 	uint8_t ** image;	/* Actual raster data. */
@@ -224,10 +224,14 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingGenerateSuperPalette
 
 // LOADING //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
 
 // LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
@@ -245,9 +249,8 @@ void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance c
 
 // CONVERSION //
 void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im); // Red and Blue component swap (INPLACE)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBGRXToL(ImagingMemoryInstance const* const __restrict pSrcImageBGRX); // (NOT INPLACE)   // **** uses tbb (parallel) ****
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageL); // (NOT INPLACE)      // **** uses tbb (parallel) ****
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA); // (NOT INPLACE)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To32(ImagingMemoryInstance const* const __restrict pSrcImageL); // (NOT INPLACE)   // **** uses tbb (parallel) **** -- 16bit images must be upscaled to 32bit before any resampling. then the grayscale image should be converted back to 16 bits only at the end of what ever filter process is taking place.
+ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_32To16(ImagingMemoryInstance const* const __restrict pSrcImageL);
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);

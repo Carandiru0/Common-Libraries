@@ -337,6 +337,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
 	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u16(float const a) // implicitly rounds to nearest int
+	{
+		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtps_epi32(_mm_set1_ps(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX))));
+	}
 	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u16(__m128 const xmVectorColor) // implicitly rounds to nearest int
 	{
 		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX)));
