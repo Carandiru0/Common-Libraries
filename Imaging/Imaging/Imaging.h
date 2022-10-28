@@ -235,6 +235,10 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uin
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
 
+// 2 seperate greyscale L images to one combined LA image
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingL16L16ToLA16(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
+
 // LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
 ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);  // chroma-key[ 0x00b140 ] enabled internally  ** do not load multiple sequences at the same time in multiple threads - this is because of lockless file reading (optimization) **

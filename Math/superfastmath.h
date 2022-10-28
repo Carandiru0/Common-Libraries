@@ -367,6 +367,19 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u16(xmVectorColor));
 	}
 
+	STATIC_INLINE_PURE float const __vectorcall u16_to_float(uint16_t const byte) // byte (0-65535) to normalized float (0.0f ... 1.0f)
+	{
+		constexpr float const INV_USHORT = 1.0f / 65535.0f;
+
+		return(_mm256_cvtss_f32(saturate(_mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_set1_epi32(byte)), _mm256_set1_ps(INV_USHORT)))));
+	}
+	STATIC_INLINE_PURE uint16_t const __vectorcall float_to_u16(float const norm) // normalized float (0.0f ... 1.0f) to byte (0-65535)
+	{
+		constexpr float const USHORT = 65535.0f;
+
+		return(_mm256_cvtsi256_si32(saturate_to_u8(_mm256_mul_ps(_mm256_set1_ps(norm), _mm256_set1_ps(USHORT)))));
+	}
+
 	STATIC_INLINE_PURE float const __vectorcall u8_to_float(uint8_t const byte) // byte (0-255) to normalized float (0.0f ... 1.0f)
 	{
 		constexpr float const INV_BYTE = 1.0f / 255.0f;

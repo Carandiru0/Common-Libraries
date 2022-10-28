@@ -8,6 +8,9 @@
 #include <fmt/format.h>
 #include <sstream>
 #include <Objbase.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 #if INCLUDE_PNG_SUPPORT
 #include "lodepng.h"
@@ -24,8 +27,8 @@
 /* --------------------------------------------------------------------
 * Standard image object.
 */
-static constexpr int64_t const IMAGE_SIZE_THRESHOLD(16384ull * 16384ull * 4ull);	// max loaded file image size, resampling can only goto a maximum of 16384x16384
-static constexpr int32_t const MAX_LUT_DIMENSION_SIZE(65 + 1);						// maximum lut dimension n x n x n
+static constexpr int64_t const IMAGE_SIZE_THRESHOLD(16384ull * 16384ull * 4ull + 1ull);	// max loaded file image size, resampling can only goto a maximum of 16384x16384
+static constexpr int32_t const MAX_LUT_DIMENSION_SIZE(65 + 1);						    // maximum lut dimension n x n x n
 
 static ImagingMemoryInstance* const __restrict
 ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ysize,
@@ -1554,19 +1557,55 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemory
 	uint32_t scanline(height);
 	while (0 != scanline) {
 
-		uint32_t bytes(stride);
-		while (0 != bytes) {
+		uint32_t pixels(stride);
+		while (0 != pixels) {
 		
 			*pOut++ = *pInL++;
 			*pOut++ = *pInA++;
 
-			--bytes;
+			pixels -= 2;
 		}
 
 		--scanline;
 	}
 
 	return(returnLA);
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingL16L16ToLA16(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
+{
+	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);
+
+	if (width != pSrcImageA->xsize
+		|| height != pSrcImageA->ysize) {
+
+		return(nullptr); // assume both L images passed in are the same dimensions.
+	}
+
+	Imaging returnLA16(ImagingNew(MODE_LA16, width, height));
+
+	uint16_t* __restrict pOut = (uint16_t * __restrict)returnLA16->block;
+	uint16_t const* __restrict pInL16 = (uint16_t const* __restrict)pSrcImageL->block;  // L
+	uint16_t const* __restrict pInA16 = (uint16_t const* __restrict)pSrcImageA->block;  // A
+
+	uint32_t const stride = pSrcImageL->linesize; // using checked src dimensions, want iterations in bytes.
+
+	uint32_t scanline(height);
+	while (0 != scanline) {
+
+		uint32_t pixels(stride);
+		while (0 != pixels) {
+
+			*pOut++ = *pInL16++;
+			*pOut++ = *pInA16++;
+
+			pixels -= 2;
+		}
+
+		--scanline;
+	}
+
+	return(returnLA16);
 }
 
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath)
@@ -2278,7 +2317,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingCompressBGRAToBC7(Im
 namespace
 {
 	/// Scale a value by mip level, but do not reduce to zero.
-	inline uint32_t mipScale(uint32_t value, uint32_t mipLevel) {
+	inline uint32_t const mipScale(uint32_t const value, uint32_t const mipLevel) {
 		return std::max(value >> mipLevel, (uint32_t)1);
 	}
 	/// KTX files use OpenGL format values. This converts some common ones to Vulkan equivalents.
@@ -2321,7 +2360,280 @@ namespace
 		}
 		return MODE_ERROR;
 	}
-	/// Layout of a KTX file in a buffer.
+	inline eIMAGINGMODE const VKtoImagingMode(uint32_t const vkFormat) {
+		switch (vkFormat) {
+		case 9: return MODE_L; // VK_FORMAT_R8_UNORM 
+
+		case 16: return MODE_LA; // VK_FORMAT_R8G8_UNORM 
+
+		case 70: return MODE_L16;   // VK_FORMAT_R16_UNORM 
+
+		case 77: return MODE_LA16;  // VK_FORMAT_R16G16_UNORM 
+
+		case 23: return MODE_RGB; // VK_FORMAT_R8G8B8_UNORM 
+		case 29: return MODE_RGB; // VK_FORMAT_R8G8B8_SRGB 
+		case 30: return MODE_RGB; // VK_FORMAT_B8G8R8_UNORM 
+		case 36: return MODE_RGB; // VK_FORMAT_B8G8R8_SRGB 
+
+		case 37: return MODE_BGRA; // VK_FORMAT_R8G8B8A8_UNORM 
+		case 43: return MODE_BGRA; // VK_FORMAT_R8G8B8A8_SRGB 
+		case 44: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_UNORM 
+		case 50: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB 
+
+		}
+		return MODE_ERROR;
+	}
+
+	/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
+	template<uint32_t const version = 1>  // KTX "1"  or  KTX "2"
+	class KTXFileLayout {
+
+		enum KTX_VERSION
+		{
+			KTX1 = 1,
+			KTX2 = 2
+		};
+
+	public:
+		KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end)
+		{
+			uint8_t const* p = begin;
+
+			if constexpr (KTX1 == version) {
+
+				if (p + sizeof(Header) > end) return;
+
+				header_data.v1 = *(Header*)p;
+
+				static constexpr uint8_t magic[] = {
+				  0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A // KTX1
+				};
+
+				if (memcmp(magic, header_data.v1.identifier, sizeof(magic))) {
+					return;
+				}
+
+				static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
+				if (KTX_ENDIAN_REF != header_data.v1.endianness) {
+					swap(header_data.v1.glType);
+					swap(header_data.v1.glTypeSize);
+					swap(header_data.v1.glFormat);
+					swap(header_data.v1.glInternalFormat);
+					swap(header_data.v1.glBaseInternalFormat);
+					swap(header_data.v1.pixelWidth);
+					swap(header_data.v1.pixelHeight);
+					swap(header_data.v1.pixelDepth);
+					swap(header_data.v1.numberOfArrayElements);
+					swap(header_data.v1.numberOfFaces);
+					swap(header_data.v1.numberOfMipmapLevels);
+					swap(header_data.v1.bytesOfKeyValueData);
+				}
+
+				header_data.v1.numberOfArrayElements = std::max(1U, header_data.v1.numberOfArrayElements);
+				header_data.v1.numberOfFaces = std::max(1U, header_data.v1.numberOfFaces);
+				header_data.v1.numberOfMipmapLevels = std::max(1U, header_data.v1.numberOfMipmapLevels);
+				header_data.v1.pixelDepth = std::max(1U, header_data.v1.pixelDepth);
+
+				format_ = GLtoImagingMode(header_data.v1.glInternalFormat);
+				if (format_ == MODE_ERROR) return;
+
+				p += sizeof(Header);
+				if (p + header_data.v1.bytesOfKeyValueData > end) return;
+				p += header_data.v1.bytesOfKeyValueData;
+
+				for (uint32_t mipLevel = 0; mipLevel != header_data.v1.numberOfMipmapLevels; ++mipLevel) {
+
+					// bugfix for arraylayers and faces not being factored into final size for this mip
+					uint32_t layerImageSize;
+					if (header_data.v1.numberOfArrayElements > 1) { // avoid div by zero
+						layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+					}
+					else if (header_data.v1.numberOfFaces > 1) {
+						header_data.v1.numberOfArrayElements = header_data.v1.numberOfFaces; header_data.v1.numberOfFaces = 1;
+						layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+					}
+					else {
+						layerImageSize = *(uint32_t*)(p);
+					}
+
+					layerImageSize = (layerImageSize + 3) & ~3;
+					if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(layerImageSize);
+
+					layerImageSizes_.push_back(layerImageSize);
+
+					uint32_t imageSize = layerImageSize * header_data.v1.numberOfFaces * header_data.v1.numberOfArrayElements;
+
+					imageSize = (imageSize + 3) & ~3;
+					if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(imageSize);
+
+					imageSizes_.push_back(imageSize);
+
+					p += 4; // offset for reading layer imagesize above
+					imageOffsets_.push_back((uint32_t)(p - begin));
+
+					if (p + imageSize > end) {
+						// see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+						// fix bugs... https://github.com/dariomanesku/cmft/issues/29
+						header_data.v1.numberOfMipmapLevels = mipLevel + 1;
+						break;
+					}
+					p += imageSize; // next mip offset if there is one
+				}
+			}
+			else {
+
+				if (p + sizeof(HeaderV2) > end) return;
+
+				header_data.v2 = *(HeaderV2*)p;
+
+				static constexpr uint8_t magic[] = {
+				  0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A  // KTX2
+				};
+
+				if (memcmp(magic, header_data.v2.identifier, sizeof(magic))) {
+					return;
+				}
+
+				header_data.v2.numberOfArrayElements = std::max(1U, header_data.v2.numberOfArrayElements);
+				header_data.v2.numberOfFaces = std::max(1U, header_data.v2.numberOfFaces);
+				header_data.v2.numberOfMipmapLevels = std::max(1U, header_data.v2.numberOfMipmapLevels);
+				header_data.v2.pixelDepth = std::max(1U, header_data.v2.pixelDepth);
+
+				format_ = VKtoImagingMode(header_data.v2.format);
+				if (format_ == MODE_ERROR) return;
+
+				p += sizeof(HeaderV2);
+
+				uint32_t imageOffset((uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength)); // ktx2 image data start offset
+
+				for (uint32_t mipLevel = 0; mipLevel != header_data.v2.numberOfMipmapLevels; ++mipLevel) {
+
+					p += 16; // skip byte offset & length, now on mip image image size
+
+					// bugfix for arraylayers and faces not being factored into final size for this mip
+					uint32_t layerImageSize;
+					if (header_data.v2.numberOfArrayElements > 1) { // avoid div by zero
+						layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+					}
+					else if (header_data.v2.numberOfFaces > 1) {
+						header_data.v2.numberOfArrayElements = header_data.v2.numberOfFaces; header_data.v2.numberOfFaces = 1;
+						layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+					}
+					else {
+						layerImageSize = *(uint32_t*)(p);
+					}
+
+					layerImageSize = (layerImageSize + 3) & ~3;
+					layerImageSizes_.push_back(layerImageSize);
+
+					uint32_t imageSize = layerImageSize * header_data.v2.numberOfFaces * header_data.v2.numberOfArrayElements;
+
+					imageSize = (imageSize + 3) & ~3;
+					imageSizes_.push_back(imageSize);
+
+					p += 8; // offset for reading layer imagesize above
+					imageOffsets_.push_back(imageOffset); // relative to start of image data in ktx v2
+					imageOffset += imageSize;
+				}
+			}
+			ok_ = true;
+		}
+
+		uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
+
+			if constexpr (KTX2 == version) {
+				return imageOffsets_[mipLevel] + (arrayLayer * header_data.v2.numberOfFaces + face) * layerImageSizes_[mipLevel];
+			}
+
+			return imageOffsets_[mipLevel] + (arrayLayer * header_data.v1.numberOfFaces + face) * layerImageSizes_[mipLevel];
+		}
+
+		uint32_t const size(uint32_t const mipLevel) {
+			return imageSizes_[mipLevel];
+		}
+
+		bool const ok() const { return ok_; }
+		eIMAGINGMODE const format() const { return format_; }
+		uint32_t const mipLevels() const { if constexpr (KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
+		uint32_t const arrayLayers() const { if constexpr (KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
+		uint32_t const width(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
+		uint32_t const height(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
+		uint32_t const depth(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
+
+		ImagingMemoryInstance* const __restrict upload(uint8_t const* const __restrict pFileBegin) const {
+
+			switch (format()) // only these image formats are supported natively for ktx
+			{
+			case MODE_BGRA:
+				return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_LA16:
+				return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_LA:
+				return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_L16:
+				return(ImagingLoadFromMemoryL16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_L:
+				return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			default:
+				break;
+			}
+
+			return(nullptr);
+		}
+	private:
+		static void swap(uint32_t& value) {
+			value = value >> 24 | (value & 0xff0000) >> 8 | (value & 0xff00) << 8 | value << 24;
+		}
+
+		struct Header {
+			uint8_t identifier[12];
+			uint32_t endianness;
+			uint32_t glType;
+			uint32_t glTypeSize;
+			uint32_t glFormat;
+			uint32_t glInternalFormat;
+			uint32_t glBaseInternalFormat;
+			uint32_t pixelWidth;
+			uint32_t pixelHeight;
+			uint32_t pixelDepth;
+			uint32_t numberOfArrayElements;
+			uint32_t numberOfFaces;
+			uint32_t numberOfMipmapLevels;
+			uint32_t bytesOfKeyValueData;
+		};
+
+		struct HeaderV2 {
+			uint8_t identifier[12];
+			uint32_t format;
+			uint32_t typeSize;
+			uint32_t pixelWidth;
+			uint32_t pixelHeight;
+			uint32_t pixelDepth;
+			uint32_t numberOfArrayElements; // layer count / number of array elements
+			uint32_t numberOfFaces;
+			uint32_t numberOfMipmapLevels;
+			uint32_t supercompressionScheme;
+			uint32_t dfdOffset;
+			uint32_t dfdLength;
+			uint32_t kvdOffset;
+			uint32_t kvdLength;
+			uint64_t sgdOffset;
+			uint64_t sgdLength;
+		};
+
+		struct {
+			Header   v1{};
+			HeaderV2 v2{};
+		} header_data{};
+
+		eIMAGINGMODE format_;
+		bool ok_ = false;
+		std::vector<uint32_t> imageOffsets_;
+		std::vector<uint32_t> imageSizes_;
+		std::vector<uint32_t> layerImageSizes_;
+	};
+
+	/* OLD
 	template<bool const WorkaroundLayerSizeDoubledInFileBug = false>
 	class KTXFileLayout {
 	public:
@@ -2489,28 +2801,61 @@ namespace
 		std::vector<uint32_t> imageSizes_;
 		std::vector<uint32_t> layerImageSizes_;
 	};
+	*/
 } // end ns
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath)
 {
-	std::error_code error{};
+	static constexpr wchar_t const* const KTX1 = L".ktx";
+	static constexpr wchar_t const* const KTX2 = L".ktx2";
 
-	mio::mmap_source mmap = mio::make_mmap_source(filenamepath, false, error);
-	if (!error) {
+	fs::path filename(filenamepath);
 
-		if (mmap.is_open() && mmap.is_mapped()) {
-			___prefetch_vmem(mmap.data(), mmap.size());
+	uint32_t version(0);
 
-			uint8_t const* const pReadPointer((uint8_t*)mmap.data());
+	if (fs::exists(filename)) {
 
-			KTXFileLayout const ktxFile(pReadPointer, pReadPointer + mmap.length());
-
-			if (ktxFile.ok()) {
-
-				return(ktxFile.upload(pReadPointer));
-			}
+		if (filename.extension() == KTX1) {
+			version = 1;
 		}
+		else if (filename.extension() == KTX2) {
+			version = 2;
+		}
+	}
+	else {
+		return(nullptr);
+	}
 
+	if (0 != version) {
+		std::error_code error{};
+
+		mio::mmap_source mmap = mio::make_mmap_source(filenamepath, false, error);
+		if (!error) {
+
+			if (mmap.is_open() && mmap.is_mapped()) {
+				___prefetch_vmem(mmap.data(), mmap.size());
+
+				uint8_t const* const pReadPointer((uint8_t*)mmap.data());
+
+				if (1 == version) {
+					KTXFileLayout<1> const ktxFile(pReadPointer, pReadPointer + mmap.length());
+
+					if (ktxFile.ok()) {
+
+						return(ktxFile.upload(pReadPointer));
+					}
+				}
+				else {
+					KTXFileLayout<2> const ktx2File(pReadPointer, pReadPointer + mmap.length());
+
+					if (ktx2File.ok()) {
+
+						return(ktx2File.upload(pReadPointer));
+					}
+				}
+			}
+
+		}
 	}
 
 	return(nullptr);
