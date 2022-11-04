@@ -497,7 +497,7 @@ ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xs
                 ResampleHorizontal = ImagingResampleHorizontal_8bpc;
                 ResampleVertical = ImagingResampleVertical_8bpc;
                 break;
-            case IMAGING_TYPE_INT32:
+            case IMAGING_TYPE_UINT32:
                 ResampleHorizontal = ImagingResampleHorizontal_32bpc;
                 ResampleVertical = ImagingResampleVertical_32bpc;
                 break;

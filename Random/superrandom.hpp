@@ -43,6 +43,36 @@ void SetSeed(int64_t Seed); // this is never the secure seed, just a new seed fo
 void SetSeed(int32_t Seed); // 32 bit seeds are ok, but 64 bit seeds are better
 
 // These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
+// Psuedo Random numbers are generated to fit a specific distribution. eg.) Gaussian -> all values generated fit a "bellcurve"
+
+// normal/gaussian distribution
+// see https://en.wikipedia.org/wiki/Normal_distribution
+XMVECTOR const __vectorcall PsuedoGaussianVector2(float const mu, float const sigma);
+float const __vectorcall PsuedoGaussianFloat(float const mu, float const sigma);
+
+// triangular distribution
+// see https://en.wikipedia.org/wiki/Triangular_distribution
+float const __vectorcall PsuedoTriangularFloat(float const low, float const high);
+
+// uniformly random point on the edge of a unit circle
+// produces 2d normal vector as well
+XMVECTOR const __vectorcall PsuedoCircleEdgeVector2();
+// uniformly random point in unit circle
+XMVECTOR const __vectorcall PsuedoCircleAreaVector2();
+// gaussian random point in unit circle
+XMVECTOR const __vectorcall PsuedoGaussianCircleAreaVector2();
+
+// uniformly random on the surface of a sphere
+// produces normal vectors as well
+XMVECTOR const __vectorcall PsuedoSphereSurfaceVector3();
+
+// uniformly random within the volume of a sphere
+XMVECTOR const __vectorcall PsuedoSphereVolumeVector3();
+
+
+
+// These Functions are for the Psuedo RNG - Deterministic by setting seed value with SetSeed()
+XMVECTOR const __vectorcall PsuedoRandomVector(/* Range is 0.0f to 1.0f*/);
 float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/);
 int64_t const PsuedoRandomNumber64(int64_t const iMin = 0, int64_t const iMax = INT64_MAX); //* do note that with a min of 0 there will be no negative numbers
 int32_t const PsuedoRandomNumber32(int32_t const iMin = 0, int32_t const iMax = INT32_MAX); // inclusive of min & max
@@ -295,13 +325,109 @@ STATIC_INLINE_PURE int32_t const RandomNumber_Limits_16(uint32_t const xrandx, i
 }
 // end private //
 
+XMVECTOR const __vectorcall PsuedoGaussianVector2(float const mu, float const sigma) {
+
+	XMVECTOR const xmQ = PsuedoRandomVector();
+	XMFLOAT4A vQ;
+	XMStoreFloat4A(&vQ, xmQ);
+
+	XMVECTOR const xmXZ(XMVectorSet(vQ.x, vQ.z, 0.0f, 0.0f)),
+		     const xmYW(XMVectorSet(vQ.y, vQ.w, 0.0f, 0.0f));
+
+	XMVECTOR const g2rad = SFM::__sqrt(XMVectorScale(SFM::__log(XMVectorSubtract(XMVectorReplicate(1.0f), xmYW)), -2.0f));
+	XMVECTOR const z = SFM::__cos(vQ.x * XM_2PI) * g2rad;
+
+	return( SFM::__fma(z, XMVectorSet(sigma, sigma, 0.0f, 0.0f), XMVectorSet(mu, mu, 0.0f, 0.0f)) ); // xy - vector2 returned
+}
+float const __vectorcall PsuedoGaussianFloat(float const mu, float const sigma) {
+
+	XMVECTOR const xmQ = PsuedoRandomVector();
+	XMFLOAT4A vQ;
+	XMStoreFloat4A(&vQ, xmQ);
+	float const g2rad = SFM::__sqrt(-2.0f * (SFM::__log(1.0f - vQ.y)));
+	float z = SFM::__cos(vQ.x * XM_2PI) * g2rad;
+
+	return( z * sigma + mu );
+}
+
+float const __vectorcall PsuedoTriangularFloat(float const low, float const high)
+{
+	float u = PsuedoRandomFloat();
+	if (u > 0.5f) {
+		return( high + (low - high) * (SFM::__sqrt((1.0 - u) * 0.5f)) );
+	}
+	else {
+		return( low + (high - low) * (SFM::__sqrt(u * 0.5f)) );
+	}
+}
+
+XMVECTOR const __vectorcall PsuedoCircleEdgeVector2()
+{
+	float const u = PsuedoRandomFloat();
+	float const phi = XM_2PI * u;
+
+	float s(0.0f), c(0.0f);
+	s = SFM::sincos(&c, phi);
+
+	return(XMVectorSet(c, s, 0.0f, 0.0f));
+}
+
+XMVECTOR const __vectorcall PsuedoCircleAreaVector2()
+{
+	return(XMVectorScale(PsuedoCircleEdgeVector2(), SFM::__sqrt(PsuedoRandomFloat())));
+}
+
+XMVECTOR const __vectorcall PsuedoGaussianCircleAreaVector2()
+{
+	return(XMVectorScale(PsuedoCircleEdgeVector2(), SFM::__sqrt(-0.5f * SFM::__log(PsuedoRandomFloat()))));
+}
+
+XMVECTOR const __vectorcall PsuedoSphereSurfaceVector3()
+{
+	XMVECTOR const xmQ = PsuedoRandomVector();
+	XMFLOAT4A vQ;
+	XMStoreFloat4A(&vQ, xmQ);
+
+	float const phi = XM_2PI * vQ.x;
+	float const rho_c = 2.0f * vQ.y - 1.0f;
+	float const rho_s = SFM::__sqrt(1.0f - (rho_c * rho_c));
+
+	float s(0.0f), c(0.0f);
+	s = SFM::sincos(&c, phi);
+
+	return(XMVectorSet(rho_s * c, rho_s * s, rho_c, 0.0f));
+}
+// uniformly random within the volume of a sphere
+XMVECTOR const __vectorcall PsuedoSphereVolumeVector3()
+{
+	return(XMVectorScale(PsuedoSphereSurfaceVector3(), SFM::__pow(PsuedoRandomFloat(), 1.0f/3.0f)));
+}
+
+XMVECTOR const __vectorcall PsuedoRandomVector(/* Range is 0.0f to 1.0f*/)
+{
+	union {
+		union
+		{
+			uint32_t const i;
+			float const f;
+		} const pun[4]{ 0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U),
+						0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U),
+						0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U),
+						0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U) };
+
+		XMFLOAT4 const v;
+
+	} const randoms;
+
+	return(XMVectorSubtract(XMLoadFloat4(&randoms.v), XMVectorReplicate(1.0f)));
+}
 float const PsuedoRandomFloat(/* Range is 0.0f to 1.0f*/)
 {
 	union
 	{
 		uint32_t const i;
 		float const f;
-	} const pun = { 0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U) };
+	} const pun { 0x3F800000U | (uint32_t(xorshift_next() >> 32ULL) >> 9U) };
 
 	return(pun.f - 1.0f);
 

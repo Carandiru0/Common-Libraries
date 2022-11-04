@@ -45,14 +45,10 @@ enum eIMAGINGMODE
 	MODE_1BIT = (1<<0),
 	MODE_L = (1<<1), MODE_LA = (1<<2),
 	MODE_L16 = (1<<3), MODE_LA16 = (1<<4),
-	MODE_I = (1<<5),
-	//MODE_F = (1<<6),
+	MODE_U32 = (1<<5),
 	MODE_RGB = (1<<7),
 	MODE_BGRX = (1<<8), MODE_BGRA = (1 << 9),
-	//MODE_CMYK = (1<<10),
-	//MODE_YCbCr = (1 << 11),
-	//MODE_LAB = (1 << 12),
-	//MODE_HSV = (1 << 13),
+	MODE_BGRA16 = (1 << 10),
 	MODE_BC7 = (1 << 14),
 	MODE_BC6A = (1 << 15),
 
@@ -61,8 +57,9 @@ enum eIMAGINGMODE
 
 /* pixel types */
 #define IMAGING_TYPE_UINT8 (1<<0)
-#define IMAGING_TYPE_INT32 (1<<1)
-#define IMAGING_TYPE_SPECIAL (1<<2)
+#define IMAGING_TYPE_UINT32 (1<<1)
+#define IMAGING_TYPE_UINT64 (1<<2)
+#define IMAGING_TYPE_SPECIAL (1<<3)
 
 #define IMAGING_TRANSFORM_NEAREST 0
 #define IMAGING_TRANSFORM_BOX 4
@@ -160,6 +157,16 @@ typedef struct ImagingLUT	// 16bit/channel 3D LUT
 
 } ImagingLUT;
 
+typedef struct ImagingHistogram // Histogram for ImagingMemoryInstance
+{
+	uint32_t* __restrict block;// 1D Array of count - could be 65536 or 256 depending on image used to create the histogram
+	uint32_t             count;
+
+	/* Virtual methods */
+	void(*destroy)(ImagingHistogram* __restrict im);
+} ImagingHistogram;
+
+
 // color operations //
 uvec4_v const ImagingSRGBtoLinearVector(uint32_t const packed_srgb);
 uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);
@@ -168,6 +175,7 @@ uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);
 // OPERATIONS //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingNew( eIMAGINGMODE const mode, int const xsize, int const ysize);
 ImagingLUT* const __restrict __vectorcall			 ImagingNew(int const size);
+ImagingHistogram* const __restrict __vectorcall		 ImagingNewHistogram(ImagingMemoryInstance const* const __restrict im);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingNewCompressed(eIMAGINGMODE const mode /*should be MODE_BC7 or MODE_BC6A*/, int const xsize, int const ysize, int BufferSize);
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingCopy(ImagingMemoryInstance const* const __restrict im);
@@ -181,7 +189,10 @@ void __vectorcall ImagingDelete(ImagingSequence* __restrict im);
 void __vectorcall ImagingDelete(ImagingSequence const* __restrict im);
 void __vectorcall ImagingDelete(ImagingLUT* __restrict im);
 void __vectorcall ImagingDelete(ImagingLUT const* __restrict im);
+void __vectorcall ImagingDelete(ImagingHistogram* __restrict im);
+void __vectorcall ImagingDelete(ImagingHistogram const* __restrict im);
 
+// SPECIAL FUNCTIONS //
 extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter);
 //extern ImagingSequence* const __restrict __vectorcall		ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter); // alternatively for sequences you can specify dimensions in ImagingLoadGIFSequence, which performs resampling to the desired dimensions aswell.
 void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im);	// (INPLACE) key[ 0x00b140 ] r g b
@@ -194,6 +205,8 @@ void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, I
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE)  ** image must be square (width == height)
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) ** image must be square (width == height)
+ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input.
+
 
 // PALETTE GENERAL // 
 
@@ -224,20 +237,26 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingGenerateSuperPalette
 
 
 // LOADING //
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
 
+// GREYSCALE //
+
 // 2 seperate greyscale L images to one combined LA image
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingL16L16ToLA16(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
+
+// FILE SUPPORT, DEFAULT SUPPORTED : KTX, KTX2, GIF and LUT's
 
 // LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
