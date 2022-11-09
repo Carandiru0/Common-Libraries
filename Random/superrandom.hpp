@@ -332,7 +332,7 @@ XMVECTOR const __vectorcall PsuedoGaussianVector2(float const mu, float const si
 	XMStoreFloat4A(&vQ, xmQ);
 
 	XMVECTOR const xmXZ(XMVectorSet(vQ.x, vQ.z, 0.0f, 0.0f)),
-		     const xmYW(XMVectorSet(vQ.y, vQ.w, 0.0f, 0.0f));
+		           xmYW(XMVectorSet(vQ.y, vQ.w, 0.0f, 0.0f));
 
 	XMVECTOR const g2rad = SFM::__sqrt(XMVectorScale(SFM::__log(XMVectorSubtract(XMVectorReplicate(1.0f), xmYW)), -2.0f));
 	XMVECTOR const z = SFM::__cos(vQ.x * XM_2PI) * g2rad;

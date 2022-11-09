@@ -145,7 +145,12 @@ STATIC_INLINE_PURE point2D_t const __vectorcall p2D_sgn(point2D_t const a) {
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_swap(point2D_t const a) {
 	return(point2D_t(a.y, a.x));
 }
-
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
+	return(point2D_t(a.x & (max_ - 1), a.y & (max_ - 1)));
+}
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrapany(point2D_t const a, int32_t const max_) {
+	return(point2D_t(a.x % max_, a.y % max_));
+}
 STATIC_INLINE_PURE point2D_t const XM_CALLCONV v2_to_p2D_rounded(FXMVECTOR const v) {	// assumes XMFLOAT2A was loaded
 	return(point2D_t(_mm_cvtps_epi32(SFM::round(v))));
 }

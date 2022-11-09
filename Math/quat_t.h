@@ -147,5 +147,23 @@ STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR p, XMVECTOR co
 	return(XMVectorAdd(xmP, origin));
 }
 
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR const xmP, FXMVECTOR const xmQ)
+{
+	// For rotation quaternions, the inverse equals the conjugate
+	// p` = inverse(q) * p * q
+	return(XMQuaternionMultiply(XMQuaternionConjugate(xmQ), XMQuaternionMultiply(XMVectorSetW(xmP, 0.0f), xmQ)));
+}
+
+STATIC_INLINE_PURE XMVECTOR const XM_CALLCONV v3_rotate(FXMVECTOR p, XMVECTOR const origin, FXMVECTOR const xmQ)
+{
+	// translate point back to origin:
+	XMVECTOR xmP = XMVectorSubtract(p, origin);
+
+	// rotate point
+	xmP = v3_rotate(xmP, xmQ);
+
+	// translate point back:
+	return(XMVectorAdd(xmP, origin));
+}
 #endif // QUATERNION_H
 
