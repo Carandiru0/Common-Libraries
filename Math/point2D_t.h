@@ -331,9 +331,9 @@ STATIC_INLINE_PURE bool const __vectorcall r2D_contains(rect2D_t const a, rect2D
 	// max = right bottom
 
 	// Check bounds
-	return ((b.left >= a.left) &&
-			(b.top >= a.top) &&
-			(b.right <= a.right) &&
+	return ((b.left >= a.left)   &
+			(b.top >= a.top)     &
+			(b.right <= a.right) &
 			(b.bottom <= a.bottom));
 }
 STATIC_INLINE_PURE bool const __vectorcall r2D_contains(rect2D_t const a, point2D_t const b) {
@@ -344,9 +344,9 @@ STATIC_INLINE_PURE bool const __vectorcall r2D_contains(rect2D_t const a, point2
 	// max = right bottom
 	
 	// Check bounds
-	return ((b.x >= a.left)  &&
-		    (b.y >= a.top)   &&
-		    (b.x <= a.right) &&
+	return ((b.x >= a.left)  &
+		    (b.y >= a.top)   &
+		    (b.x <= a.right) &
 		    (b.y <= a.bottom));
 }
 #endif

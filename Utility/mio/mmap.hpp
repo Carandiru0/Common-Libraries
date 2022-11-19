@@ -17,7 +17,7 @@
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
+#pragma once
 #ifndef MIO_MMAP_HEADER
 #define MIO_MMAP_HEADER
 
@@ -95,7 +95,7 @@ private:
     // user provided it, but we must close it if we obtained it using the
     // provided path. For this reason, this flag is used to determine when to
     // close file_handle_.
-    bool is_handle_internal_;
+    bool is_handle_internal_{ false };
 
 public:
     /**
@@ -104,33 +104,6 @@ public:
      * result in undefined behaviour/segmentation faults.
      */
     basic_mmap() = default;
-
-#ifdef __cpp_exceptions
-    /**
-     * The same as invoking the `map` function, except any error that may occur
-     * while establishing the mapping is wrapped in a `std::system_error` and is
-     * thrown.
-     */
-    template<typename String>
-    basic_mmap(const String& path, const size_type offset = 0, const size_type length = map_entire_file)
-    {
-        std::error_code error;
-        map(path, offset, length, error);
-        if(error) { throw std::system_error(error); }
-    }
-
-    /**
-     * The same as invoking the `map` function, except any error that may occur
-     * while establishing the mapping is wrapped in a `std::system_error` and is
-     * thrown.
-     */
-    basic_mmap(const handle_type handle, const size_type offset = 0, const size_type length = map_entire_file)
-    {
-        std::error_code error;
-        map(handle, offset, length, error);
-        if(error) { throw std::system_error(error); }
-    }
-#endif // __cpp_exceptions
 
     /**
      * `basic_mmap` has single-ownership semantics, so transferring ownership
@@ -432,14 +405,26 @@ using ummap_sink = basic_mmap_sink<unsigned char>;
  * Convenience factory method that constructs a mapping for any `basic_mmap` or
  * `basic_mmap` type.
  */
+static constexpr uint32_t const temporary_attributes = FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE;
+
 template<
     typename MMap,
     typename MappingToken
 > MMap make_mmap(const MappingToken& token,
-        int64_t offset, int64_t length, bool const temporary, std::error_code& error)
+        int64_t offset, int64_t length, uint32_t const attributes, std::error_code& error)
 {
     MMap mmap;
-    mmap.map(token, offset, length, temporary, error);
+    mmap.map(token, offset, length, attributes, error);
+    return mmap;
+}
+
+template<
+    typename MMap
+> MMap make_mmap_file_handle(file_handle_type const& handle, // HANDLE must be a valid file handle
+    int64_t offset, int64_t length, std::error_code& error)
+{
+    MMap mmap;
+    mmap.map(handle, offset, length, error);
     return mmap;
 }
 
@@ -452,15 +437,22 @@ template<
  */
 template<typename MappingToken>
 mmap_source make_mmap_source(const MappingToken& token, mmap_source::size_type offset,
-        mmap_source::size_type length, bool const temporary, std::error_code& error)
+        mmap_source::size_type length, uint32_t const attributes, std::error_code& error)
 {
-    return make_mmap<mmap_source>(token, offset, length, temporary, error);
+    return make_mmap<mmap_source>(token, offset, length, attributes, error);
 }
 
 template<typename MappingToken>
-mmap_source make_mmap_source(const MappingToken& token, bool const temporary, std::error_code& error)
+mmap_source make_mmap_source(const MappingToken& token, uint32_t const attributes, std::error_code& error)
 {
-    return make_mmap_source(token, 0, map_entire_file, temporary, error);
+    return make_mmap_source(token, 0, map_entire_file, attributes, error);
+}
+
+// HANDLE must be a valid file handle
+__inline mmap_source make_mmap_source_file_handle(file_handle_type const handle, mmap_source::size_type offset,
+    mmap_source::size_type length, std::error_code& error)
+{
+    return make_mmap_file_handle<mmap_source>(handle, offset, length, error);
 }
 
 /**
@@ -472,16 +464,31 @@ mmap_source make_mmap_source(const MappingToken& token, bool const temporary, st
  */
 template<typename MappingToken>
 mmap_sink make_mmap_sink(const MappingToken& token, mmap_sink::size_type offset,
-        mmap_sink::size_type length, bool const temporary, std::error_code& error)
+        mmap_sink::size_type length, uint32_t const attributes, std::error_code& error)
 {
-    return make_mmap<mmap_sink>(token, offset, length, temporary, error);
+    return make_mmap<mmap_sink>(token, offset, length, attributes, error);
 }
 
 template<typename MappingToken>
-mmap_sink make_mmap_sink(const MappingToken& token, bool const temporary, std::error_code& error)
+mmap_sink make_mmap_sink(const MappingToken& token, uint32_t const attributes, std::error_code& error)
 {
-    return make_mmap_sink(token, 0, map_entire_file, temporary, error);
+    return make_mmap_sink(token, 0, map_entire_file, attributes, error);
 }
+
+// HANDLE must be a valid file handle
+__inline mmap_sink make_mmap_sink_file_handle(file_handle_type const handle, mmap_sink::size_type offset,
+    mmap_sink::size_type length, std::error_code& error)
+{
+    return make_mmap_file_handle<mmap_sink>(handle, offset, length, error);
+}
+
+// forward decl
+namespace detail
+{
+    template<typename String>
+    file_handle_type open_file(const String& path, const access_mode mode, uint32_t const attributes, std::error_code& error);
+
+} // namespace detail
 
 } // namespace mio
 

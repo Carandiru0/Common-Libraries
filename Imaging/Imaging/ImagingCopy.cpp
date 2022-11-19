@@ -1819,7 +1819,7 @@ bool const __vectorcall ImagingSaveRaw(ImagingMemoryInstance const* const __rest
 
 	FILE* fOut;
 
-	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		uint8_t const*  __restrict pOut = pSrcImage->block;
 		uint32_t const stride = pSrcImage->linesize;
@@ -1847,7 +1847,7 @@ bool const ImagingSaveJPEG(eIMAGINGMODE const outClrSpace, ImagingMemoryInstance
 
 	FILE* fOut;
 
-	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		struct jpeg_compress_struct cinfo;
 		struct jpeg_error_mgr jerr;
@@ -2038,7 +2038,7 @@ bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* const __re
 
 			FILE* fOut;
 
-			if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+			if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 			{
 				// write data
 				fwrite(&(*buffer), buffersize, 1, fOut);
@@ -2138,7 +2138,7 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 
 	FILE* fOut;
 
-	if (((MODE_L|MODE_LA|MODE_L16|MODE_LA16|MODE_BGRX|MODE_BGRA|MODE_BGRA16) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (((MODE_L|MODE_LA|MODE_L16|MODE_LA16|MODE_BGRX|MODE_BGRA|MODE_BGRA16) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		KtxHeader header = {};
 		memcpy(header.identifier, ktx_magic_id, 12);
@@ -2303,7 +2303,7 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	else
 		return(false);
 
-	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		// write header
 		fwrite(&header, sizeof(KtxHeader), 1, fOut);
@@ -2346,7 +2346,7 @@ bool const __vectorcall ImagingSaveCompressedBC7ToKTX(ImagingMemoryInstance cons
 
 	FILE* fOut;
 
-	if (MODE_BC7 == pSrcImage->mode && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wb"))
+	if (MODE_BC7 == pSrcImage->mode && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		KtxHeader header = {};
 		memcpy(header.identifier, ktx_magic_id, 12);

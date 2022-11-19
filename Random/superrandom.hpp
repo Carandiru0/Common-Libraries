@@ -354,7 +354,7 @@ float const __vectorcall PsuedoTriangularFloat(float const low, float const high
 {
 	float u = PsuedoRandomFloat();
 	if (u > 0.5f) {
-		return( high + (low - high) * (SFM::__sqrt((1.0 - u) * 0.5f)) );
+		return( high + (low - high) * (SFM::__sqrt((1.0f - u) * 0.5f)) );
 	}
 	else {
 		return( low + (high - low) * (SFM::__sqrt(u * 0.5f)) );
@@ -464,7 +464,9 @@ uint8_t const PsuedoRandomNumber8(uint8_t const uiMin, uint8_t const uiMax)
 	return(PsuedoRandomNumber(uiMin, uiMax));
 }*/
 
-/*public override uint GetHash (int buf) {    // ** xxHash ** Function https://blogs.unity3d.com/2015/01/07/a-primer-on-repeatable-random-numbers/
+// ** xxHash ** Function https://blogs.unity3d.com/2015/01/07/a-primer-on-repeatable-random-numbers/
+
+/*public override uint GetHash (int buf) {
 uint h32 = (uint)seed + PRIME32_5;
 h32 += 4U;
 h32 += (uint)buf * PRIME32_3;

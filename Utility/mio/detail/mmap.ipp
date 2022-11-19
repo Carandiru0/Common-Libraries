@@ -17,7 +17,7 @@
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
+#pragma once
 #ifndef MIO_BASIC_MMAP_IMPL
 #define MIO_BASIC_MMAP_IMPL
 
@@ -58,20 +58,27 @@ template<
     typename = typename std::enable_if<
         std::is_same<typename char_type<String>::type, char>::value
     >::type
-> file_handle_type open_file_helper(const String& path, const access_mode mode, bool const temporary)
+> file_handle_type open_file_helper(const String& path, const access_mode mode, uint32_t attributes = FILE_ATTRIBUTE_NORMAL)
 {
     int const disposition(std::filesystem::exists(path) ? OPEN_EXISTING : CREATE_NEW);
  	
+    if (0 == attributes) {
+        attributes = FILE_ATTRIBUTE_NORMAL; // default to normal
+    }
+    if (access_mode::read == mode) {
+        attributes |= FILE_ATTRIBUTE_READONLY;
+    }
+
     auto const handle = ::CreateFile(c_str(path),
-            (mode == access_mode::read ? GENERIC_READ : (GENERIC_WRITE)),
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ|GENERIC_WRITE)),
             (mode == access_mode::read ? FILE_SHARE_READ : 0) | FILE_SHARE_DELETE,
             0,
             disposition,
-            (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
+            attributes,
             0);
 	
-    if (temporary) { // *bugfix set attributes on temporary files again
-        SetFileAttributes(c_str(path), (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)));
+    if (FILE_ATTRIBUTE_TEMPORARY == (FILE_ATTRIBUTE_TEMPORARY & attributes)) { // *bugfix set attributes on temporary files again
+        SetFileAttributes(c_str(path), attributes | (FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE));
     }
 
     return(handle);
@@ -81,20 +88,27 @@ template<typename String>
 typename std::enable_if<
     std::is_same<typename char_type<String>::type, wchar_t>::value,
     file_handle_type
->::type open_file_helper(const String& path, const access_mode mode, bool const temporary)
+>::type open_file_helper(const String& path, const access_mode mode, uint32_t attributes = FILE_ATTRIBUTE_NORMAL)
 {
     int const disposition(std::filesystem::exists(path) ? OPEN_EXISTING : CREATE_NEW);
 
+    if (0 == attributes) {
+        attributes = FILE_ATTRIBUTE_NORMAL; // default to normal
+    }
+    if (access_mode::read == mode) {
+        attributes |= FILE_ATTRIBUTE_READONLY;
+    }
+
     auto const handle = ::CreateFile(c_str(path),
-            (mode == access_mode::read ? GENERIC_READ : (GENERIC_WRITE)),
+            (mode == access_mode::read ? GENERIC_READ : (GENERIC_READ|GENERIC_WRITE)),
             (mode == access_mode::read ? FILE_SHARE_READ : 0) | FILE_SHARE_DELETE,
             0,
             disposition,
-            (temporary ? (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)) : FILE_ATTRIBUTE_NORMAL),
+            attributes,
             0);
 	
-    if (temporary) { // *bugfix set attributes on temporary files again
-        SetFileAttributes(c_str(path), (FILE_FLAG_RANDOM_ACCESS | FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE | (mode == access_mode::read ? FILE_ATTRIBUTE_READONLY : 0)));
+    if (FILE_ATTRIBUTE_TEMPORARY == (FILE_ATTRIBUTE_TEMPORARY & attributes)) { // *bugfix set attributes on temporary files again
+        SetFileAttributes(c_str(path), attributes | (FILE_ATTRIBUTE_HIDDEN | FILE_FLAG_DELETE_ON_CLOSE));
     }
 
     return(handle);
@@ -119,7 +133,7 @@ inline std::error_code last_error() noexcept
 }
 
 template<typename String>
-file_handle_type open_file(const String& path, const access_mode mode, bool const temporary,
+file_handle_type open_file(const String& path, const access_mode mode, uint32_t const attributes,
         std::error_code& error)
 {
     error.clear();
@@ -129,7 +143,7 @@ file_handle_type open_file(const String& path, const access_mode mode, bool cons
         return invalid_handle;
     }
 #ifdef _WIN32
-    const auto handle = win::open_file_helper(path, mode, temporary);
+    const auto handle = win::open_file_helper(path, mode, attributes);
 #else // POSIX
     const auto handle = ::open(c_str(path),
             mode == access_mode::read ? O_RDONLY : O_RDWR);
@@ -187,7 +201,7 @@ inline mmap_context memory_map(const file_handle_type file_handle, const int64_t
             win::int64_high(max_file_size),
             win::int64_low(max_file_size),
             0);
-    if(file_mapping_handle == invalid_handle)
+    if(nullptr == file_mapping_handle || file_mapping_handle == invalid_handle)
     {
         error = detail::last_error();
         return {};
@@ -335,16 +349,22 @@ void basic_mmap<AccessMode, ByteT>::map(const handle_type handle,
         return;
     }
 
-    const auto file_size = detail::query_file_size(handle, error);
-    if(error)
-    {
-        return;
-    }
+    // range checking may not be required
+    int64_t file_size(0);
+    if (length == map_entire_file) {
+        
+        file_size = detail::query_file_size(handle, error);
 
-    if((offset + length) > (size_type)file_size)
-    {
-        error = std::make_error_code(std::errc::invalid_argument);
-        return;
+        if (error)
+        {
+            return;
+        }
+
+        if ((offset + length) > (size_type)file_size)
+        {
+            error = std::make_error_code(std::errc::invalid_argument);
+            return;
+        }
     }
 
     const auto ctx = detail::memory_map(handle, offset,
@@ -384,8 +404,7 @@ basic_mmap<AccessMode, ByteT>::sync(std::error_code& error)
     if(data())
     {
 #ifdef _WIN32
-        if(::FlushViewOfFile(get_mapping_start(), mapped_length_) == 0
-           || ::FlushFileBuffers(file_handle_) == 0)
+        if(::FlushViewOfFile(get_mapping_start(), mapped_length_) == 0)
 #else // POSIX
         if(::msync(get_mapping_start(), mapped_length_, MS_SYNC) != 0)
 #endif
@@ -394,12 +413,6 @@ basic_mmap<AccessMode, ByteT>::sync(std::error_code& error)
             return;
         }
     }
-#ifdef _WIN32
-    if(::FlushFileBuffers(file_handle_) == 0)
-    {
-        error = detail::last_error();
-    }
-#endif
 }
 
 template<access_mode AccessMode, typename ByteT>

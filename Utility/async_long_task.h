@@ -77,7 +77,7 @@ public:
 	{
 		yield = 0,		// SleepEx(0, FALSE) returns immediately but reliquinshes the time slice for the thread.
 		minimum = 1,	// 1ms
-		frame = 33,		// 33ms
+		frame = 16,		// 16ms 
 		half_second = 500,
 		full_second = 1000
 	};
@@ -90,9 +90,15 @@ private:
 	};
 	
 public:
-	template <thread_id_t const thread, typename lambda>
+	template <thread_id_t const thread, typename lambda> // ** use if don't care lambda/function is unique 
 	static inline task_id_t const enqueue(lambda&& work_) {  // returns task_id
-		return(_enqueue<thread>(new internal_only::async_work_lambda(std::forward<lambda&&>(work_))));
+		static internal_only::async_work_lambda<lambda> instance(std::forward<lambda&&>(work_));
+		return(_enqueue<thread>( &instance ));
+	}
+	template <thread_id_t const thread, uint32_t const unique_id, typename lambda> // ** use if lambda/function is required to be distinct from another invocation of the same lambda. unique_id is used to define each invocation...
+	static inline task_id_t const enqueue(lambda&& work_) {  // returns task_id
+		static internal_only::async_work_lambda<lambda> instance(std::forward<lambda&&>(work_));
+		return(_enqueue<thread>(&instance));
 	}
 	template<thread_id_t const thread, bool const test_only = false>  // returns true when task is pending or active, false if finished or does not exist
 	static inline bool const wait(task_id_t const task, [[maybe_unused]] std::string_view const context) {  // equal to ZERO equals wait for nothing, task ids
@@ -410,7 +416,7 @@ inline void async_long_task::process_async_queue(tbb::concurrent_queue< internal
 
 			//---------------------------------------------//
 
-			delete work;
+			// not dynamically allocated, just clear pointer.
 			work = nullptr;
 		}
 	}
