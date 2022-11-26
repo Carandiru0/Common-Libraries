@@ -145,10 +145,10 @@ STATIC_INLINE_PURE point2D_t const __vectorcall p2D_sgn(point2D_t const a) {
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_swap(point2D_t const a) {
 	return(point2D_t(a.y, a.x));
 }
-STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
-	return(point2D_t(a.x & (max_ - 1), a.y & (max_ - 1)));
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap_pow2(point2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
+	return(point2D_t(_mm_and_epi32(a.v, point2D_t(max_ - 1).v)));
 }
-STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrapany(point2D_t const a, int32_t const max_) {
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, int32_t const max_) {
 	return(point2D_t(a.x % max_, a.y % max_));
 }
 STATIC_INLINE_PURE point2D_t const XM_CALLCONV v2_to_p2D_rounded(FXMVECTOR const v) {	// assumes XMFLOAT2A was loaded
@@ -268,6 +268,13 @@ STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_clamp(rect2D_t const a, int32
 
 	return(rect2D_t(point2D_t(SFM::clamp(a.left_top().v, xmMin, xmMax)),
 		point2D_t(SFM::clamp(a.right_bottom().v, xmMin, xmMax))));
+}
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap(rect2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
+	int64_t const max_min_one(max_ - 1);
+	return(rect2D_t(a.left & max_min_one, a.top & max_min_one, a.right & max_min_one, a.bottom & max_min_one));
+}
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrapany(rect2D_t const a, int32_t const max_) {
+	return(rect2D_t(a.left % max_, a.top % max_, a.right % max_, a.bottom % max_));
 }
 
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_set_by_width_height(point2D_t const x0_y0, point2D_t const width_height) { // default is expansion from top left
