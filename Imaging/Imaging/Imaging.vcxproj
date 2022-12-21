@@ -83,8 +83,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\Documents\Visual Studio 2017\Projects;X:\tbb\include;X:\Compressonator\include;X:\fmt;X:\libjpeg-turbo-1.5.3;X:\maxvr_depend\DirectXMathOverride;$(IncludePath)</IncludePath>
-    <LibraryPath>X:\tbb\build\vs2019\x64\Release-MT;X:\Compressonator\Compressonator\Compressonator\Build\VS2019\Release\x64;X:\fmt\x64\Release;X:\libjpeg-turbo-1.5.3\release;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Documents\Visual Studio 2017\Projects;X:\tbb\include;X:\Compressonator\include;X:\fmt;X:\libjpeg-turbo-1.5.3;X:\TinyTIFF\src;$(IncludePath)</IncludePath>
+    <LibraryPath>X:\tbb\build\vs2019\x64\Release-MT;X:\Compressonator\Compressonator\Compressonator\Build\VS2019\Release\x64;X:\fmt\x64\Release;X:\libjpeg-turbo-1.5.3\release;X:\TinyTIFF\build\src\Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -141,7 +141,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>
       </SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_LIB;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;__x86_64__;__AVX2__;__AVX__;_XM_AVX2_INTRINSICS_;_XM_AVX_INTRINSICS_;_XM_SSE4_INTRINSICS_;_ENABLE_EXTENDED_ALIGNED_STORAGE;_ENABLE_ATOMIC_ALIGNMENT_FIX;_HAS_EXCEPTIONS=0;_CRT_DISABLE_PERFCRIT_LOCKS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;WIN32_LEAN_AND_MEAN;VC_EXTRALEAN;__x86_64__;__AVX2__;__AVX__;_XM_AVX2_INTRINSICS_;_XM_AVX_INTRINSICS_;_XM_SSE4_INTRINSICS_;_ENABLE_EXTENDED_ALIGNED_STORAGE;_ENABLE_ATOMIC_ALIGNMENT_FIX;_HAS_EXCEPTIONS=0;_CRT_DISABLE_PERFCRIT_LOCKS;INCLUDE_TIF_SUPPORT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
@@ -171,8 +171,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>
-      </AdditionalDependencies>
+      <AdditionalDependencies>TinyTIFF.lib</AdditionalDependencies>
       <IgnoreAllDefaultLibraries>
       </IgnoreAllDefaultLibraries>
       <ForceSymbolReferences>
@@ -189,7 +188,6 @@
     <ClInclude Include="gif_lib.h" />
     <ClInclude Include="Imaging.h" />
     <ClInclude Include="LinkImaging.h" />
-    <ClInclude Include="lodepng.h" />
     <ClInclude Include="RBFilter_AVX2.h" />
     <ClInclude Include="ResampleSIMD.h" />
     <ClInclude Include="stdafx.h" />
@@ -207,7 +205,6 @@
     </ClCompile>
     <ClCompile Include="Imaging.cpp" />
     <ClCompile Include="ImagingCopy.cpp" />
-    <ClCompile Include="lodepng.cpp" />
     <ClCompile Include="openbsd-reallocarray.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>

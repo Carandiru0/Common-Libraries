@@ -9,11 +9,13 @@
 #include <sstream>
 #include <Objbase.h>
 #include <filesystem>
+#include <Utility/stringconv.h>
 
 namespace fs = std::filesystem;
 
-#if INCLUDE_PNG_SUPPORT
-#include "lodepng.h"
+#if INCLUDE_TIF_SUPPORT
+#include "tinytiffreader.h"
+#include "tinytiffwriter.h"
 #endif
 
 #if INCLUDE_JPEG_SUPPORT
@@ -24,10 +26,22 @@ namespace fs = std::filesystem;
 #include <Utility/mio/mmap.hpp>
 #include <Utility/mem.h>
 
+#pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
+
+#define IMAGING_LIMIT_184K (184320ull)
+#define IMAGING_LIMIT_16K (16386ull)
+
+#ifdef IMAGING_LIMIT_184K
+#define IMAGING_LIMIT (IMAGING_LIMIT_184K + 1ull)
+#else
+#define IMAGING_LIMIT (IMAGING_LIMIT_16K + 1ull)
+#endif
+
 /* --------------------------------------------------------------------
 * Standard image object.
 */
-static constexpr int64_t const IMAGE_SIZE_THRESHOLD(16385ull * 16385ull + 1ull);	// max loaded file image size, resampling can only goto a maximum of 16384x16384
+static constexpr uint64_t const IMAGE_SIZE_THRESHOLD(IMAGING_LIMIT * IMAGING_LIMIT + 1ull);	    // max loaded file image size
 static constexpr int32_t const MAX_LUT_DIMENSION_SIZE(65 + 1);						    // maximum lut dimension n x n x n
 
 static ImagingMemoryInstance* const __restrict
@@ -98,11 +112,29 @@ ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ys
 		/* 32-bit true colour images with alpha */
 		im->bands = im->pixelsize = 4;
 		break;
+	case MODE_RGB16:
+		/* 16-bit bpc */
+		im->bands = 3;
+		im->pixelsize = 6;
+		im->type = IMAGING_TYPE_UINT64;
+		break;
+	case MODE_BGRX16:
+		/* 16-bit bpc */
+		im->bands = 3;
+		im->pixelsize = 8;
+		im->type = IMAGING_TYPE_UINT64;
+		break;
 	case MODE_BGRA16:
 		/* 16-bit bpc */
 		im->bands = 4;
 		im->pixelsize = 8;
 		im->type = IMAGING_TYPE_UINT64;
+		break;
+	case MODE_F32:
+		/* 32-bit float images */
+		im->bands = 1;
+		im->pixelsize = 4;
+		im->type = IMAGING_TYPE_FLOAT32;
 		break;
 	case MODE_BC7:
 	case MODE_BC6A:
@@ -316,19 +348,19 @@ ImagingNewBlock(eIMAGINGMODE const mode, int const xsize, int const ysize)
 	here before going to the array allocator. Check anyway.
 	*/
 	if (im->linesize &&
-		im->ysize > INT_MAX / im->linesize) {
+		im->ysize > INT64_MAX / im->linesize) {
 		/* punt if we're going to overflow */
 		return NULL;
 	}
 
-	if (im->ysize * im->linesize <= 0) {
+	if ((size_t)im->ysize * (size_t)im->linesize <= 0) {
 		/* some platforms return NULL for malloc(0); this fix
 		prevents MemoryError on zero-sized images on such
 		platforms */
 		im->block = (uint8_t *)scalable_malloc(1);
 	}
 	else {
-		im->block = (uint8_t *)scalable_malloc(im->ysize * im->linesize);
+		im->block = (uint8_t *)scalable_malloc((size_t)im->ysize * (size_t)im->linesize);
 
 		if (im->block) {		// alias pointers are only valid for buffersize that is 
 			// composed of stritcly ysize * linesize = blocksize
@@ -357,7 +389,7 @@ ImagingNew(eIMAGINGMODE const mode, int const xsize, int const ysize)
 		return (Imaging)ImagingError_ValueError("bad image size");
 	}
 
-	if ((int64_t)xsize * (int64_t)ysize < IMAGE_SIZE_THRESHOLD) {
+	if ((uint64_t)xsize * (uint64_t)ysize < IMAGE_SIZE_THRESHOLD) {
 		im = ImagingNewBlock(mode, xsize, ysize);
 		if (im)
 			return(im);
@@ -407,7 +439,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingNewCompressed(eIMAGI
 		return (Imaging)ImagingError_ValueError("bad image size");
 	}
 
-	if ((int64_t)xsize * (int64_t)ysize < IMAGE_SIZE_THRESHOLD) {
+	if ((uint64_t)xsize * (uint64_t)ysize < IMAGE_SIZE_THRESHOLD) {
 		im = ImagingNewBlock(mode, xsize, ysize);
 		if (im)
 			return(im);
@@ -435,12 +467,17 @@ ImagingHistogram* const __restrict __vectorcall ImagingNewHistogram(ImagingMemor
 
 	bool bHDR(false);
 
+	// unsupported formats:
+	// MODE_U32
+	// MODE_F32
+
 	switch (im->mode)
 	{
 	case MODE_L16:
 	case MODE_LA16:
-	case MODE_U32:
 	case MODE_BGRA16:
+	case MODE_BGRX16:
+	case MODE_RGB16:
 		histo->count = UINT16_MAX + 1;    // # of histogram bins for 16bpc image
 		bHDR = true;
 		break;
@@ -456,19 +493,24 @@ ImagingHistogram* const __restrict __vectorcall ImagingNewHistogram(ImagingMemor
 	int const width(im->xsize), height(im->ysize);
 
 	uint32_t* const __restrict counts = (uint32_t * const __restrict)histo->block;
-	uint16_t const* pIn16 = (uint16_t const*)im->block;
-	uint8_t const* pIn8 = (uint8_t const*)im->block;  // A
-
 	uint32_t count(width * height);
-	while (--count != 0) { // for every pixel in the image
 
-		if (bHDR) {
+	if (bHDR) {
+		uint16_t const* pIn16 = (uint16_t const*)im->block;
+
+		while (--count != 0) { // for every pixel in the image
+
 			++counts[*pIn16];
 			++pIn16;
 		}
-		else {
+	}
+	else {
+		uint8_t const* pIn8 = (uint8_t const*)im->block;
+
+		while (--count != 0) { // for every pixel in the image
+
 			++counts[*pIn8];
-			++pIn8;
+			++pIn8;	
 		}
 	}
 
@@ -847,6 +889,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMem
 
 	return(img_returned);
 }
+
+// (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input.
 ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im)
 {
 	uint32_t const height(im->ysize);
@@ -873,28 +917,29 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMa
 			xmTangentSpaceNormal = XMVector3Normalize(xmTangentSpaceNormal);
 
 			// Mikkelsen2020Bump.pdf - https://mmikkelsen3d.blogspot.com/2011/07/derivative-maps.html
+			
+			// This is setup expecting the input normal map in standard Tangent Space Coordinates
+			// red X+ (right), green Y+ (down), blue Z+ (near) [set as default coordinate system in ShaderMap (TS)]
+		 
 			constexpr float const scale = 1.0f / 128.0f; // 89.55 degrees
 
 			XMFLOAT3A vM, vMa;
 			XMStoreFloat3A(&vM, xmTangentSpaceNormal);
 			XMStoreFloat3A(&vMa, SFM::abs(xmTangentSpaceNormal));
-
-			float z_ma = SFM::max(vMa.z, scale * SFM::max(vMa.x, vMa.y));
-
-			if (0.0f == z_ma) {
-				z_ma = 0.001f; // avoid division by zero
-			}
-			XMVECTOR xmDerivative = XMVectorDivide(XMVectorNegate(XMVectorSet(vM.x, vM.y, 0.0f, 0.0f)), XMVectorReplicate(z_ma));
-			// back to 0 ... 1, and then finally uint16_t range
+			                           // avoid division by zero on absolute value
+			float const z_ma = SFM::max(0.0001f, SFM::max(vMa.z, scale * SFM::max(vMa.x, vMa.y)));
+			                                                                                                                                              // in vulkan texture origin is upper-left, however TS (tangent space) uses -1 as up aswell. So the *y component is already negated* So it passes thru untouched, do not negate it again!
+			XMVECTOR xmDerivative = XMVectorDivide(XMVectorNegate(XMVectorSet(vM.x, vM.y, 0.0f, 0.0f)), XMVectorReplicate(z_ma));                         // *bugfix - -float2(vM.x, (-1.0f)*vM.y)/z_ma is supposed to be the output of the derivative map (signed here then packed unsigned)
+			// back to 0 ... 1, and then finally uint16_t range                                                                    
 			xmDerivative = SFM::saturate(SFM::__fma(xmDerivative, XMVectorReplicate(0.5f), XMVectorReplicate(0.5f)));
-			xmDerivative = XMVectorMultiply(xmDeNorm, xmDerivative);
+			xmDerivative = XMVectorMultiply(xmDeNorm, xmDerivative);                                                               
 
 			uvec4_t la16{};
 
 			SFM::saturate_to_u16(xmDerivative, la16);
-
-			// store the 2 16bit components
-			blockOut[y * width + x] = la16.r | ((la16.g << 16) & 0xffff0000);
+			//                                      ABGR              GR              AL   <--- in memory 
+			// store the 2 16bit components         RGBA (backwards)  RG (backwards)  LA
+			blockOut[y * width + x] = la16.r | ((la16.g << 16) & 0xffff0000); 
 		}
 	}
 
@@ -932,9 +977,17 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA16(std::w
 {
 	return(ImagingLoadRaw(MODE_BGRA16, filenamepath, width, height));
 }
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB16(std::wstring_view const filenamepath, int const width, int const height)
+{
+	return(ImagingLoadRaw(MODE_RGB16, filenamepath, width, height));
+}
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height)
 {
 	return(ImagingLoadRaw(MODE_BGRA, filenamepath, width, height));
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB(std::wstring_view const filenamepath, int const width, int const height)
+{
+	return(ImagingLoadRaw(MODE_RGB, filenamepath, width, height));
 }
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height)
 {
@@ -951,6 +1004,10 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstri
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height)
 {
 	return(ImagingLoadRaw(MODE_L, filenamepath, width, height));
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawF32(std::wstring_view const filenamepath, int const width, int const height)
+{
+	return(ImagingLoadRaw(MODE_F32, filenamepath, width, height));
 }
 
 STATIC_INLINE_PURE ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemory(Imaging&& __restrict returnL, uint8_t const* __restrict pMemLoad)
@@ -974,9 +1031,17 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA16
 {
 	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_BGRA16, width, height)), pMemLoad));
 }
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryRGB16(uint8_t const* __restrict pMemLoad, int const width, int const height)
+{
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_RGB16, width, height)), pMemLoad));
+}
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height)
 {
 	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_BGRA, width, height)), pMemLoad));
+}
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryRGB(uint8_t const* __restrict pMemLoad, int const width, int const height)
+{
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_RGB, width, height)), pMemLoad));
 }
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA16(uint8_t const* __restrict pMemLoad, int const width, int const height)
 {
@@ -994,55 +1059,86 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint
 {
 	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_L, width, height)), pMemLoad));
 }
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryF32(uint8_t const* __restrict pMemLoad, int const width, int const height)
+{
+	return(ImagingLoadFromMemory(std::forward<Imaging&& __restrict>(ImagingNew(MODE_F32, width, height)), pMemLoad));
+}
 
-#if INCLUDE_PNG_SUPPORT
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring_view const filenamepath)
+#if INCLUDE_TIF_SUPPORT
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadTif(std::wstring_view const filenamepath)
 {
 	Imaging returnL(nullptr);
 
-	FILE* fIn;
+	TinyTIFFReaderFile* tif(nullptr);
+	tif = TinyTIFFReader_open(stringconv::ws2s(filenamepath).c_str());
 
-	if (0 == _wfopen_s(&fIn, filenamepath.data(), L"rbS"))
-	{
-		if (0 == _fseek_nolock(fIn, 0, SEEK_END) != 0)
+	if (tif) {
+
+		uint32_t const bits(TinyTIFFReader_getBitsPerSample(tif, 0));          // bit depth of component
+		uint32_t const samples(TinyTIFFReader_getSamplesPerPixel(tif));        // # of components
+
+		// determine imaging mode
+		uint32_t mode(0);
+
+		switch (samples)
 		{
-			long const size = _ftell_nolock(fIn);
-
-			if (size > 0 && size != LONG_MAX) {
-				if (0 == _fseek_nolock(fIn, 0, 0) != 0) { // back to start
-
-					size_t const buffer_size((size_t)size);
-					uint8_t* buffer(nullptr);
-					buffer = (uint8_t*)scalable_malloc((size_t)buffer_size);
-
-					size_t const read_size = _fread_nolock_s(buffer, buffer_size, 1, buffer_size, fIn);
-					
-					if (read_size == buffer_size) {
-
-						uint8_t* out(nullptr);
-						uint32_t w(0), h(0);
-						if (0 == lodepng_decode_memory(&out, &w, &h, buffer, buffer_size, LCT_RGBA, 8)) {
-
-							returnL = ImagingNew(MODE_BGRA, w, h);
-							if (nullptr != returnL) {
-								memcpy(returnL->block, out, size_t(w) * size_t(h) * sizeof(uint32_t));
-							}
-						}
-
-						if (out) {
-							lodepng_free(out); out = nullptr;
-						}
-					}
-
-					if (buffer) {
-						scalable_free(buffer); buffer = nullptr;
-					}
-				}
+		case 1:
+			if (bits > 8) {
+				mode = MODE_L16;
 			}
+			else {
+				mode = MODE_L;
+			}
+			break;
+		case 2:
+			if (bits > 8) {
+				mode = MODE_LA16;
+			}
+			else {
+				mode = MODE_LA;
+			}
+			break;
+		case 3:
+			if (bits > 8) {
+				mode = MODE_RGB16;
+			}
+			else {
+				mode = MODE_RGB;
+			}
+			break;
+		case 4:
+		default:
+			if (bits > 8) {
+				mode = MODE_BGRA16;
+			}
+			else {
+				mode = MODE_BGRA;
+			}
+			break;
 		}
 
-		_fclose_nolock(fIn); fIn = nullptr;
+		uint32_t const width(TinyTIFFReader_getWidth(tif));
+		uint32_t const height(TinyTIFFReader_getHeight(tif));
+
+		returnL = ImagingNew((eIMAGINGMODE)mode, width, height);
+		ImagingClear(returnL); // ensure memory is zeroed
+
+		// read entire image data (only supporting tif with interleaved/chunky image data - single frame)
+		TinyTIFFWriter_readImage(tif, returnL->block, size_t(returnL->ysize) * size_t(returnL->linesize));
+
+		TinyTIFFReader_close(tif); tif = nullptr;
+
+		// auto convert to BGRX
+		if (MODE_RGB == mode) {
+			Imaging const promoted_image(ImagingRGBToBGRX(returnL));
+			ImagingDelete(returnL); returnL = promoted_image;
+		}
+		else if (MODE_RGB16 == mode) {
+			Imaging const promoted_image(ImagingRGB16ToBGRX16(returnL));
+			ImagingDelete(returnL); returnL = promoted_image;
+		}
 	}
+	
 	return(returnL);
 }
 #endif
@@ -1513,6 +1609,8 @@ ImagingLUT* const __restrict __vectorcall ImagingLoadLUT(std::wstring_view const
 				}
 			}
 		}
+
+		fclose(fIn); fIn = nullptr;
 	}
 
 	return(lut);
@@ -1685,6 +1783,66 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_32To16(ImagingM
 	return(imageL);
 }
 
+// dMin, dMax are optional - by default the range is automatically determined by the images data min/max
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingF32ToL16(ImagingMemoryInstance const* const __restrict pSrcImageF, double dMin, double dMax)
+{
+	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L16, pSrcImageF->xsize, pSrcImageF->ysize);
+
+	struct { // avoid lambda heap
+		float const* const* const __restrict image_in;
+		uint16_t* const* const __restrict    image_out;
+		int const size;
+
+	} const p = { (float**)pSrcImageF->image32, (uint16_t**)imageL->image32, imageL->xsize };
+
+	// get the minmax of the float image
+	uint32_t const width(pSrcImageF->xsize),
+	               height(pSrcImageF->ysize);
+	
+	for (uint32_t y = 0; y < height; ++y) {
+
+		float const* __restrict pIn(p.image_in[y]);
+
+		for (uint32_t x = 0; x < width; ++x) {
+
+			float const value(*pIn);
+
+			dMin = SFM::min(dMin, (double)value);
+			dMax = SFM::max(dMax, (double)value);
+
+			++pIn;
+		}
+	}
+
+	// perform conversion in double precision
+	double const dMini(dMin), dMaxi(dMax);
+
+	tbb::parallel_for(int(0), imageL->ysize, [&p, dMini, dMaxi](int const y) {
+
+		static constexpr double const DENORMALIZE_L16 = double(UINT16_MAX);
+
+		int x = p.size - 1;
+		float const* __restrict pIn(p.image_in[y]);
+		uint16_t* __restrict pOut(p.image_out[y]);
+		do {
+
+			double value = (double)(*pIn);                // perform conversion in double precision
+
+			value = SFM::linearstep(dMini, dMaxi, value); // linearize range to 0.0 ... 1.0
+
+			value = value * DENORMALIZE_L16;              //  0.0 ... 65535.0
+			*pOut = SFM::saturate_to_u16(value);          //    0 ... 65535 
+
+			++pOut;
+			++pIn;
+
+		} while (--x >= 0);
+
+	});
+
+	return(imageL);
+}
+
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA)
 {
 	int const width(pSrcImageL->xsize), height(pSrcImageL->ysize);
@@ -1755,6 +1913,48 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingL16L16ToLA16(Imaging
 	}
 
 	return(returnLA16);
+}
+
+STATIC_INLINE_PURE void convertRGBToBGRX(uint8_t* const __restrict dst, uint8_t const* const __restrict src, uint32_t const pixel_count)
+{
+	// compiler will optimize this simple loop //
+	for (uint32_t i = 0; i < pixel_count; i++) {
+		dst[4 * i] = src[3 * i];
+		dst[4 * i + 1] = src[3 * i + 1];
+		dst[4 * i + 2] = src[3 * i + 2];
+	}
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRGBToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageRGB)
+{
+	int const width(pSrcImageRGB->xsize), height(pSrcImageRGB->ysize);
+
+	Imaging returnBGRX(ImagingNew(MODE_BGRX, width, height));
+
+	convertRGBToBGRX(returnBGRX->block, pSrcImageRGB->block, width*height);
+
+	return(returnBGRX);
+}
+
+STATIC_INLINE_PURE void convertRGB16ToBGRX16(uint16_t* const __restrict dst, uint16_t const* const __restrict src, uint32_t const pixel_count)
+{
+	// compiler will optimize this simple loop //
+	for (uint32_t i = 0; i < pixel_count; i++) {
+		dst[4 * i] = src[3 * i];
+		dst[4 * i + 1] = src[3 * i + 1];
+		dst[4 * i + 2] = src[3 * i + 2];
+	}
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRGB16ToBGRX16(ImagingMemoryInstance const* const __restrict pSrcImageRGB16)
+{
+	int const width(pSrcImageRGB16->xsize), height(pSrcImageRGB16->ysize);
+
+	Imaging returnBGRX16(ImagingNew(MODE_BGRX16, width, height));
+
+	convertRGB16ToBGRX16(reinterpret_cast<uint16_t* const __restrict>(returnBGRX16->block), reinterpret_cast<uint16_t* const __restrict>(pSrcImageRGB16->block), width * height);
+
+	return(returnBGRX16);
 }
 
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath)
@@ -2008,79 +2208,61 @@ void ImagingSaveJPEG(tbb::task_group& __restrict tG, eIMAGINGMODE const outClrSp
 #endif
 }
 
-#if INCLUDE_PNG_SUPPORT
-bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath)						// single image //
+#if INCLUDE_TIF_SUPPORT
+bool const __vectorcall ImagingSaveToTif(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath)						// single image //
 {
 	bool bReturn(false);
-
-	if (((MODE_L | MODE_LA | MODE_BGRX | MODE_BGRA) & pSrcImage->mode))
+	if (((MODE_L | MODE_LA | MODE_L16 | MODE_LA16 | MODE_BGRX | MODE_BGRA | MODE_BGRX16 | MODE_BGRA16) & pSrcImage->mode))
 	{
-		LodePNGColorType colortype;
+		uint32_t samples(0),    // # of components
+			     bits(0),       // bitdepth of a component
+			     interpret(0);  // TinyTIFFWriter_Greyscale, etc
+
+		samples = pSrcImage->bands; // samples / bands / components
 
 		switch (pSrcImage->mode)
 		{
+		case MODE_L16:
+			interpret = TinyTIFFWriter_Greyscale;
+			bits = 16;
+			break;
+		case MODE_LA16:
+			interpret = TinyTIFFWriter_GreyscaleAndAlpha;
+			bits = 16;
+			break;
+		case MODE_BGRX16:
+		case MODE_BGRA16:
+			interpret = TinyTIFFWriter_RGBA;
+			bits = 16;
+			break;
 		case MODE_L:
-			colortype = LCT_GREY;
-				break;
+			interpret = TinyTIFFWriter_Greyscale;
+			bits = 8;
+			break;
 		case MODE_LA:
-			colortype = LCT_GREY_ALPHA;
-				break;
+			interpret = TinyTIFFWriter_GreyscaleAndAlpha;
+			bits = 8;
+			break;
 		case MODE_BGRX:
 		case MODE_BGRA:
 		default:
-			colortype = LCT_RGBA;
+			interpret = TinyTIFFWriter_RGBA;
+			bits = 8;
 			break;
 		}
 
-		unsigned char* buffer(nullptr);
-		size_t buffersize(0);
-		if (0 == lodepng_encode_memory(&buffer, &buffersize, pSrcImage->block, pSrcImage->xsize, pSrcImage->ysize, colortype, 8) && 0 != buffersize) {
+		// TINYTIFF_EXPORT TinyTIFFWriterFile* TinyTIFFWriter_open(const char* filename, uint16_t bitsPerSample, enum TinyTIFFWriterSampleFormat sampleFormat, uint16_t samples, uint32_t width, uint32_t height, enum TinyTIFFWriterSampleInterpretation sampleInterpretation);
 
-			FILE* fOut;
+		TinyTIFFWriterFile* tif = TinyTIFFWriter_open(stringconv::ws2s(filenamepath).c_str(), bits, TinyTIFFWriter_UInt, samples, pSrcImage->xsize, pSrcImage->ysize, (TinyTIFFWriterSampleInterpretation)interpret);
+		if (tif) {
 
-			if (0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
-			{
-				// write data
-				fwrite(&(*buffer), buffersize, 1, fOut);
+			TinyTIFFWriter_writeImage(tif, pSrcImage->block);
 
-				fflush(fOut);
-				fclose(fOut); fOut = nullptr;
-				bReturn = true;
-			}
-		}
-		if (buffer) {
-			lodepng_free(buffer); buffer = nullptr;
+			TinyTIFFWriter_close(tif); tif = nullptr;
+
+			bReturn = true;
 		}
 	}
-
-	return(bReturn);
-}
-
-bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* __restrict const* const __restrict pSrcImage, uint32_t const image_count, std::wstring_view const filenamepath)		// sequence/array images //
-{
-	std::atomic_bool bReturn(true);
-
-	std::wstring const filenamepath_noext(filenamepath.substr(0, filenamepath.find_last_of('.')));
-
-	tbb::parallel_for(uint32_t(0), image_count, [&](uint32_t const image) {
-
-		if (!bReturn) // skip parallel task if one task has already failed
-			return;
-
-		std::wstring szFilename(L"");
-
-		if (image < 10) {
-			szFilename = fmt::format(L"{:s}00{:d}.png", filenamepath_noext, image);
-		}
-		else if (image < 100) {
-			szFilename = fmt::format(L"{:s}0{:d}.png", filenamepath_noext, image);
-		}
-		else {
-			szFilename = fmt::format(L"{:s}{:d}.png", filenamepath_noext, image);
-		}
-
-		bReturn = ImagingSaveToPNG(pSrcImage[image], szFilename);
-	});
 
 	return(bReturn);
 }
@@ -2103,7 +2285,7 @@ struct KtxHeader {
 	uint32_t bytesOfKeyValueData;
 };
 
-bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath)
+bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath) // RGB images should be converted to BGRX first
 {
 	bool bReturn(false);
 
@@ -2208,7 +2390,7 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 	return(bReturn);
 }
 
-bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* const* const __restrict pSrcImages, uint32_t const numLayers, std::wstring_view const filenamepath)
+bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* const* const __restrict pSrcImages, uint32_t const numLayers, std::wstring_view const filenamepath) // RGB images should be converted to BGRX first
 {
 	bool bReturn(false);
 
@@ -2507,6 +2689,9 @@ namespace
 		case 0x1908: return MODE_BGRA; // GL_RGBA
 		case 0x8C43: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB
 
+		case 0x8054: return MODE_RGB16; // GL_RGB16
+		case 0x8F9A: return MODE_RGB16; // GL_RGB16_SNORM
+
 		case 0x805B: return MODE_BGRA16; // GL_RGBA16
 		case 0x8F9B: return MODE_BGRA16; // GL_RGBA16_SNORM									
 
@@ -2542,28 +2727,32 @@ namespace
 		case 44: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_UNORM 
 		case 50: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB 
 
+		case 84: return MODE_RGB16; // VK_FORMAT_R16G16B16_UNORM 
+		case 85: return MODE_RGB16; // VK_FORMAT_R16G16B16_SNORM 
+
 		case 91: return MODE_BGRA16; // VK_FORMAT_R16G16B16A16_UNORM 
+		case 92: return MODE_BGRA16; // VK_FORMAT_R16G16B16A16_SNORM 
 
 		}
 		return MODE_ERROR;
 	}
 
-	/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
-	template<uint32_t const version = 1>  // KTX "1"  or  KTX "2"
-	class KTXFileLayout {
+	enum KTX_VERSION
+	{
+		KTX1 = 1,
+		KTX2 = 2
+	};
 
-		enum KTX_VERSION
-		{
-			KTX1 = 1,
-			KTX2 = 2
-		};
+	/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
+	template<uint32_t const version = KTX1>  // KTX "1"  or  KTX "2"
+	class KTXFileLayout {
 
 	public:
 		KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end)
 		{
 			uint8_t const* p = begin;
 
-			if constexpr (KTX1 == version) {
+			if constexpr (KTX_VERSION::KTX1 == version) {
 
 				if (p + sizeof(Header) > end) return;
 
@@ -2644,7 +2833,7 @@ namespace
 					p += imageSize; // next mip offset if there is one
 				}
 			}
-			else {
+			else { // KTX2
 
 				if (p + sizeof(HeaderV2) > end) return;
 
@@ -2705,7 +2894,7 @@ namespace
 
 		uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
 
-			if constexpr (KTX2 == version) {
+			if constexpr (KTX_VERSION::KTX2 == version) {
 				return imageOffsets_[mipLevel] + (arrayLayer * header_data.v2.numberOfFaces + face) * layerImageSizes_[mipLevel];
 			}
 
@@ -2718,11 +2907,11 @@ namespace
 
 		bool const ok() const { return ok_; }
 		eIMAGINGMODE const format() const { return format_; }
-		uint32_t const mipLevels() const { if constexpr (KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
-		uint32_t const arrayLayers() const { if constexpr (KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
-		uint32_t const width(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
-		uint32_t const height(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
-		uint32_t const depth(uint32_t const mipLevel) const { if constexpr (KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
+		uint32_t const mipLevels() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
+		uint32_t const arrayLayers() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
+		uint32_t const width(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
+		uint32_t const height(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
+		uint32_t const depth(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
 
 		ImagingMemoryInstance* const __restrict upload(uint8_t const* const __restrict pFileBegin) const {
 
@@ -2730,8 +2919,22 @@ namespace
 			{
 			case MODE_BGRA16:
 				return(ImagingLoadFromMemoryBGRA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_RGB16: // promote to BGRX16, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
+			{
+				Imaging image(ImagingLoadFromMemoryRGB16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+				Imaging const promoted_image(ImagingRGB16ToBGRX16(image));
+				ImagingDelete(image); image = nullptr;
+				return(promoted_image);
+			}
 			case MODE_BGRA:
 				return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			case MODE_RGB: // promote to BGRX, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
+			{
+				Imaging image(ImagingLoadFromMemoryRGB(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+				Imaging const promoted_image(ImagingRGBToBGRX(image));
+				ImagingDelete(image); image = nullptr;
+				return(promoted_image);
+			}
 			case MODE_LA16:
 				return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
 			case MODE_LA:
@@ -2804,8 +3007,8 @@ namespace
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath)
 {
-	static constexpr wchar_t const* const KTX1 = L".ktx";
-	static constexpr wchar_t const* const KTX2 = L".ktx2";
+	static constexpr wchar_t const* const EXTENSION_KTX1 = L".ktx";
+	static constexpr wchar_t const* const EXTENSION_KTX2 = L".ktx2";
 
 	fs::path filename(filenamepath);
 
@@ -2813,10 +3016,10 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 
 	if (fs::exists(filename)) {
 
-		if (filename.extension() == KTX1) {
+		if (filename.extension() == EXTENSION_KTX1) {
 			version = 1;
 		}
-		else if (filename.extension() == KTX2) {
+		else if (filename.extension() == EXTENSION_KTX2) {
 			version = 2;
 		}
 	}
@@ -2835,8 +3038,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 
 				uint8_t const* const pReadPointer((uint8_t*)mmap.data());
 
-				if (1 == version) {
-					KTXFileLayout<1> const ktxFile(pReadPointer, pReadPointer + mmap.length());
+				if (KTX_VERSION::KTX1 == version) {
+					KTXFileLayout<KTX_VERSION::KTX1> const ktxFile(pReadPointer, pReadPointer + mmap.length());
 
 					if (ktxFile.ok()) {
 
@@ -2844,7 +3047,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 					}
 				}
 				else {
-					KTXFileLayout<2> const ktx2File(pReadPointer, pReadPointer + mmap.length());
+					KTXFileLayout<KTX_VERSION::KTX2> const ktx2File(pReadPointer, pReadPointer + mmap.length());
 
 					if (ktx2File.ok()) {
 

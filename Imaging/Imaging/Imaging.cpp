@@ -4,6 +4,9 @@
 #include <set>
 #include <Math/superfastmath.h>
 
+#pragma intrinsic(memcpy)
+#pragma intrinsic(memset)
+
 /* palette general */
 
 namespace palette_Konstants {

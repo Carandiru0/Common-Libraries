@@ -19,47 +19,35 @@
 
 /* -------------------------------------------------------------------- */
 
-/*
-* Image data organization:
-*
-* mode				 bytes	byte order
-* -------------------------------
-* MODE_1BIT			 1		1
-* MODE_L			 1		L
-* MODE_LA			 2		L, A
-* MODE_I					4           I (32-bit integer, native byte order)
-* MODE_F					4           F (32-bit IEEE float, native byte order)
-* MODE_BGRX			 4		B, G, R, -
-* MODE_BGRA			 4		B, G, R, A
-* MODE_CMYK			 4		C, M, Y, K
-* MODE_YCbCr		 4		Y, Cb, Cr, -
-* MODE_Lab			 4      L, a, b, -
-*
-*
-* "P" is an 8-bit palette mode, which should be mapped through the
-* palette member to get an output image.  Check palette->mode to
-* find the corresponding "real" mode.
-*/
 enum eIMAGINGMODE
 {
 	MODE_1BIT = (1<<0),
+	
 	MODE_L = (1<<1), MODE_LA = (1<<2),
 	MODE_L16 = (1<<3), MODE_LA16 = (1<<4),
+	
 	MODE_U32 = (1<<5),
+	
 	MODE_RGB = (1<<7),
 	MODE_BGRX = (1<<8), MODE_BGRA = (1 << 9),
-	MODE_BGRA16 = (1 << 10),
+	
+	MODE_RGB16 = (1 << 10),
+	MODE_BGRX16 = (1 << 11), MODE_BGRA16 = (1 << 12),
+	
+	MODE_F32 = (1 << 13),
+
 	MODE_BC7 = (1 << 14),
 	MODE_BC6A = (1 << 15),
-
+	
 	MODE_ERROR
 };
 
 /* pixel types */
-#define IMAGING_TYPE_UINT8 (1<<0)
-#define IMAGING_TYPE_UINT32 (1<<1)
+#define IMAGING_TYPE_UINT8 (1<<0)        
+#define IMAGING_TYPE_UINT32 (1<<1)       
 #define IMAGING_TYPE_UINT64 (1<<2)
-#define IMAGING_TYPE_SPECIAL (1<<3)
+#define IMAGING_TYPE_FLOAT32 (1<<3)
+#define IMAGING_TYPE_SPECIAL (1<<4)
 
 #define IMAGING_TRANSFORM_NEAREST 0
 #define IMAGING_TRANSFORM_BOX 4
@@ -68,7 +56,8 @@ enum eIMAGINGMODE
 #define IMAGING_TRANSFORM_BICUBIC 3
 #define IMAGING_TRANSFORM_LANCZOS 1
 
-#define IMAGING_PIXEL_I(im,x,y) ((im)->image32[(y)][(x)])
+#define IMAGING_PIXEL_U32(im,x,y) ((im)->image32[(y)][(x)])
+#define IMAGING_PIXEL_U16(im,x,y) ((reinterpret_cast<uint16_t* const* const>((im)->image32))[(y)][(x)])
 
 /* Exceptions */
 /* ---------- */
@@ -205,9 +194,9 @@ void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, I
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE)  ** image must be square (width == height)
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) ** image must be square (width == height)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input.
-
-
+ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input. RGB16 images should be converted to BGRX16 first.
+                                                                                                                                                    // Tangent space Normal map is standards TS. red X+ (right), green Y+ (down), blue Z+ (near) [set as default coordinate system in ShaderMap (TS)]
+                                                                                                                                                    
 // PALETTE GENERAL // 
 
 // **** xmRGB should be converted to linear space range  b4 call to this function
@@ -238,34 +227,46 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingGenerateSuperPalette
 
 // LOADING //
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA16(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawF32(std::wstring_view const filenamepath, int const width, int const height);
+
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA16(uint8_t const* __restrict pMemLoad, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryRGB16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryBGRA(uint8_t const* __restrict pMemLoad, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryRGB(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryLA(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL16(uint8_t const* __restrict pMemLoad, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryL(uint8_t const* __restrict pMemLoad, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadFromMemoryF32(uint8_t const* __restrict pMemLoad, int const width, int const height);
 
 // GREYSCALE //
 
 // 2 seperate greyscale L images to one combined LA image
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingLLToLA(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingL16L16ToLA16(ImagingMemoryInstance const* const __restrict pSrcImageL, ImagingMemoryInstance const* const __restrict pSrcImageA);
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingF32ToL16(ImagingMemoryInstance const* const __restrict pSrcImageF, double dMin = FLT_MAX, double dMax = -FLT_MAX);
+
+// CONVERSION //
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingRGBToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageRGB);
+ImagingMemoryInstance* const __restrict __vectorcall  ImagingRGB16ToBGRX16(ImagingMemoryInstance const* const __restrict pSrcImageRGB16);
 
 // FILE SUPPORT, DEFAULT SUPPORTED : KTX, KTX2, GIF and LUT's
 
-// LoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. 
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath);
+// ImagingLoadKTX will load the format (UNORM / SRGB) as is, no colorspace manipulations occur. *does not support mipmaps, file cannot contain mipmaps*
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath); // RGB images loaded are internally promoted to BGRX (16bpc versions aswell)
 ImagingSequence* const __restrict __vectorcall		 ImagingLoadGIFSequence(std::wstring_view const giffilenamepath, uint32_t width = 0, uint32_t height = 0);  // chroma-key[ 0x00b140 ] enabled internally  ** do not load multiple sequences at the same time in multiple threads - this is because of lockless file reading (optimization) **
 ImagingLUT* const __restrict __vectorcall			 ImagingLoadLUT(std::wstring_view const cubefilenamepath);
 
-#if INCLUDE_PNG_SUPPORT
-// supports only loading BGRA  *** there is a bug in lodepng where the colors are off. consider a different png library -this will not be fixed.
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadPNG(std::wstring_view const filenamepath);
+#if INCLUDE_TIF_SUPPORT
+// supports loading L, L16, LA, LA16, RGB, RGB16, RGBA, RGBA16
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadTif(std::wstring_view const filenamepath);
 #endif
 
 // RAW COPY 
@@ -289,15 +290,14 @@ bool const ImagingSaveJPEG(eIMAGINGMODE const outClrSpace, ImagingMemoryInstance
 void ImagingSaveJPEG(tbb::task_group& __restrict tG, eIMAGINGMODE const outClrSpace, ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
 #endif
 
-#if INCLUDE_PNG_SUPPORT
-// supports saving L, LA, BGRX, BGRA
-bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);						// single image //
-bool const __vectorcall ImagingSaveToPNG(ImagingMemoryInstance const* __restrict const* const __restrict pSrcImage, uint32_t const image_count, std::wstring_view const filenamepath);		// sequence/array images //
+#if INCLUDE_TIF_SUPPORT
+// supports saving L, L16, LA, LA16, RGBA, RGBA16
+bool const __vectorcall ImagingSaveToTif(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
 #endif
 
 // SaveToKTX will save in the as is (no colorspace conversion) [ linear ]. If the data for the image is supposed to be SRGB, use ImageView to export a srgb copy.
-bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
-bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* const* const __restrict pSrcImages, uint32_t const numLayers, std::wstring_view const filenamepath);
+bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath); // RGB images should be converted to BGRX first
+bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* const* const __restrict pSrcImages, uint32_t const numLayers, std::wstring_view const filenamepath); // RGB images should be converted to BGRX first
 bool const __vectorcall ImagingSaveCompressedBC7ToKTX(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingCompressBGRAToBC7(ImagingMemoryInstance const* const __restrict pSrcImage, float const normalizedQuality = 0.82f);

@@ -2,7 +2,7 @@
 
 // Optimized AVX2 implementation of Recursive Bilateral Filter
 // 
-#define RBF_MAX_THREADS 8
+#define RBF_MAX_THREADS 8 // converted to use tbb
 #define STAGE_BUFFER_COUNT 3
 
 #define EDGE_COLOR_USE_MAXIMUM 0			// results in much smoother background gradients at loss of some detail - excellent for vectorization

@@ -316,6 +316,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(_mm_min_ps(_mm_max_ps(a, _mm_setzero_ps()), _mm_set1_ps(1.0f)));
 	}
+	STATIC_INLINE_PURE double const __vectorcall saturate(double const a) // for special case of between 0.0f and 1.0f
+	{
+		return(_mm_cvtsd_f64(_mm_min_sd(_mm_max_sd(_mm_set_sd(a), _mm_setzero_pd()), _mm_set_sd(1.0))));
+	}
 	STATIC_INLINE_PURE float const __vectorcall saturate(float const a) // for special case of between 0.0f and 1.0f
 	{
 		return(_mm_cvtss_f32(_mm_min_ss(_mm_max_ss(_mm_set_ss(a), _mm_setzero_ps()), _mm_set_ss(1.0f))));
@@ -337,14 +341,6 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
 	}
-	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u16(float const a) // implicitly rounds to nearest int
-	{
-		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtps_epi32(_mm_set1_ps(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX))));
-	}
-	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u16(__m128 const xmVectorColor) // implicitly rounds to nearest int
-	{
-		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX)));
-	}
 	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u8(__m128i const a)
 	{
 		return(clamp_m128i(a, _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX)));
@@ -353,6 +349,24 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	{
 		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_set1_epi32(a), _mm_setzero_si128(), _mm_set1_epi32(UINT8_MAX))));
 	}
+
+	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u16(double const a) // implicitly rounds to nearest int
+	{
+		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtpd_epi32(_mm_set1_pd(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX))));
+	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall saturate_to_u16(float const a) // implicitly rounds to nearest int
+	{
+		return((uint32_t)_mm_cvtsi128_si32(clamp_m128i(_mm_cvtps_epi32(_mm_set1_ps(a)), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX))));
+	}
+	STATIC_INLINE_PURE __m256i const __vectorcall saturate_to_u16(__m256 const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m256i(_mm256_cvtps_epi32(xmVectorColor), _mm256_setzero_si256(), _mm256_set1_epi32(UINT16_MAX)));
+	}
+	STATIC_INLINE_PURE __m128i const __vectorcall saturate_to_u16(__m128 const xmVectorColor) // implicitly rounds to nearest int
+	{
+		return(clamp_m128i(_mm_cvtps_epi32(xmVectorColor), _mm_setzero_si128(), _mm_set1_epi32(UINT16_MAX)));
+	}
+	
 
 	STATIC_INLINE_PURE void __vectorcall saturate_to_u8(__m128 const xmVectorColor, uvec4_t& __restrict scalar_values)  // implicitly rounds to nearest
 	{
@@ -367,17 +381,17 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		_mm_store_si128((__m128i*)scalar_values.data, saturate_to_u16(xmVectorColor));
 	}
 
-	STATIC_INLINE_PURE float const __vectorcall u16_to_float(uint16_t const byte) // byte (0-65535) to normalized float (0.0f ... 1.0f)
+	STATIC_INLINE_PURE float const __vectorcall u16_to_float(uint16_t const byte) // short (0-65535) to normalized float (0.0f ... 1.0f)
 	{
 		constexpr float const INV_USHORT = 1.0f / 65535.0f;
 
 		return(_mm256_cvtss_f32(saturate(_mm256_mul_ps(_mm256_cvtepi32_ps(_mm256_set1_epi32(byte)), _mm256_set1_ps(INV_USHORT)))));
 	}
-	STATIC_INLINE_PURE uint16_t const __vectorcall float_to_u16(float const norm) // normalized float (0.0f ... 1.0f) to byte (0-65535)
+	STATIC_INLINE_PURE uint32_t const __vectorcall float_to_u16(float const norm) // normalized float (0.0f ... 1.0f) to short (0-65535)
 	{
 		constexpr float const USHORT = 65535.0f;
 
-		return(_mm256_cvtsi256_si32(saturate_to_u8(_mm256_mul_ps(_mm256_set1_ps(norm), _mm256_set1_ps(USHORT)))));
+		return(_mm256_cvtsi256_si32(saturate_to_u16(_mm256_mul_ps(_mm256_set1_ps(norm), _mm256_set1_ps(USHORT)))));
 	}
 
 	STATIC_INLINE_PURE float const __vectorcall u8_to_float(uint8_t const byte) // byte (0-255) to normalized float (0.0f ... 1.0f)
@@ -712,6 +726,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	// Linear Step - give it a range [edge0, edge1] and a fraction between [0...1]
 	// returns the normalized [0...1] equivalent of whatever range [edge0, edge1] is, linearly.
 	// (like smoothstep, except it's purely linear
+	STATIC_INLINE_PURE double const __vectorcall linearstep(double const edge0, double const edge1, double const x)
+	{
+		return(saturate((x - edge0) / (edge1 - edge0)));
+	}
 	STATIC_INLINE_PURE float const __vectorcall linearstep(float const edge0, float const edge1, float const x)
 	{
 		return(saturate((x - edge0) / (edge1 - edge0)));

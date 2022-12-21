@@ -145,8 +145,14 @@ STATIC_INLINE_PURE point2D_t const __vectorcall p2D_sgn(point2D_t const a) {
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_swap(point2D_t const a) {
 	return(point2D_t(a.y, a.x));
 }
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap_pow2(point2D_t const a, point2D_t const max_) { // **only works if max_ is a power of two**
+	return(point2D_t(_mm_and_epi32(a.v, p2D_subs(max_, 1).v)));
+}
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap_pow2(point2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
 	return(point2D_t(_mm_and_epi32(a.v, point2D_t(max_ - 1).v)));
+}
+STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, point2D_t const max_) {
+	return(point2D_t(a.x % max_.x, a.y % max_.y));
 }
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, int32_t const max_) {
 	return(point2D_t(a.x % max_, a.y % max_));
@@ -253,14 +259,25 @@ STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_sub(rect2D_t const rect, poin
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_min(rect2D_t const a, rect2D_t const b) {
 	return(rect2D_t(_mm_min_epi32(a.v, b.v)));
 }
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_min(rect2D_t const a, point2D_t const b) {
+	return(rect2D_t(_mm_min_epi32(a.v, b.v)));
+}
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_min(rect2D_t const a, int32_t const b) {
 	return(rect2D_t(_mm_min_epi32(a.v, _mm_set1_epi32(b))));
 }
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_max(rect2D_t const a, rect2D_t const b) {
 	return(rect2D_t(_mm_max_epi32(a.v, b.v)));
 }
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_max(rect2D_t const a, point2D_t const b) {
+	return(rect2D_t(_mm_max_epi32(a.v, b.v)));
+}
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_max(rect2D_t const a, int32_t const b) {
 	return(rect2D_t(_mm_max_epi32(a.v, _mm_set1_epi32(b))));
+}
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_clamp(rect2D_t const a, point2D_t const min_, point2D_t const max_) {
+
+	return(rect2D_t(point2D_t(SFM::clamp(a.left_top().v, min_.v, max_.v)),
+		point2D_t(SFM::clamp(a.right_bottom().v, min_.v, max_.v))));
 }
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_clamp(rect2D_t const a, int32_t const min_, int32_t const max_) {
 
@@ -269,11 +286,11 @@ STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_clamp(rect2D_t const a, int32
 	return(rect2D_t(point2D_t(SFM::clamp(a.left_top().v, xmMin, xmMax)),
 		point2D_t(SFM::clamp(a.right_bottom().v, xmMin, xmMax))));
 }
-STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap(rect2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap_pow2(rect2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
 	int64_t const max_min_one(max_ - 1);
 	return(rect2D_t(a.left & max_min_one, a.top & max_min_one, a.right & max_min_one, a.bottom & max_min_one));
 }
-STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrapany(rect2D_t const a, int32_t const max_) {
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap(rect2D_t const a, int32_t const max_) {
 	return(rect2D_t(a.left % max_, a.top % max_, a.right % max_, a.bottom % max_));
 }
 

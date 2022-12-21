@@ -89,7 +89,7 @@ namespace { // local to this file only
    In one cases the sum of the coefficients will be negative,
    in the other it will be more than 1.0. That is why we need
    two extra bits for overflow and int type. */
-#define PRECISION_BITS (32 - 8 - 2)
+#define PRECISION_BITS (32 - 8 - 2) // applies only to 8bit image resampling, 32bit & 16bit do not use this.
 
 
 /* We use signed int16_t type to store coefficients. */
@@ -418,23 +418,60 @@ ImagingResampleHorizontal_32bpc(ImagingMemoryInstance const* const __restrict im
 	}
 
 {
-		for (yy = 0; yy < imOut->ysize; yy++) {
-			for (xx = 0; xx < xsize; xx++) {
-				xmin = xbounds[xx * 2 + 0];
-				xmax = xbounds[xx * 2 + 1];
-				k = &kk[xx * kmax];
-				ss = 0.0;
-				for (x = 0; x < xmax; x++)
-					ss += IMAGING_PIXEL_I(imIn, x + xmin, yy) * k[x];
-				IMAGING_PIXEL_I(imOut, xx, yy) = SFM::round_to_u32(SFM::abs(ss));
-			}
+	for (yy = 0; yy < imOut->ysize; yy++) {
+		for (xx = 0; xx < xsize; xx++) {
+			xmin = xbounds[xx * 2 + 0];
+			xmax = xbounds[xx * 2 + 1];
+			k = &kk[xx * kmax];
+			ss = 0.0;
+			for (x = 0; x < xmax; x++)
+				ss += IMAGING_PIXEL_U32(imIn, x + xmin, yy) * k[x];
+			IMAGING_PIXEL_U32(imOut, xx, yy) = (uint32_t)SFM::round_to_u64(SFM::abs(ss));
 		}
+	}
 }
     scalable_free(kk);
     scalable_free(xbounds);
     return imOut;
 }
+static Imaging
+ImagingResampleHorizontal_16bpc(ImagingMemoryInstance const* const __restrict imIn, int const xsize, struct filter* const __restrict filterp)
+{
+    Imaging imOut;
+    double ss;
+    int xx, yy, x, kmax, xmin, xmax;
+    int* xbounds;
+    double* k, * kk;
 
+    kmax = precompute_coeffs(imIn->xsize, xsize, filterp, &xbounds, &kk);
+    if (!kmax) {
+        return (Imaging)ImagingError_MemoryError();
+    }
+
+    imOut = ImagingNew(imIn->mode, xsize, imIn->ysize);
+    if (!imOut) {
+        scalable_free(kk);
+        scalable_free(xbounds);
+        return NULL;
+    }
+
+    {
+        for (yy = 0; yy < imOut->ysize; yy++) {
+            for (xx = 0; xx < xsize; xx++) {
+                xmin = xbounds[xx * 2 + 0];
+                xmax = xbounds[xx * 2 + 1];
+                k = &kk[xx * kmax];
+                ss = 0.0;
+                for (x = 0; x < xmax; x++)
+                    ss += IMAGING_PIXEL_U16(imIn, x + xmin, yy) * k[x];
+                IMAGING_PIXEL_U16(imOut, xx, yy) = (uint16_t)SFM::round_to_u64(SFM::abs(ss));
+            }
+        }
+    }
+    scalable_free(kk);
+    scalable_free(xbounds);
+    return imOut;
+}
 
 static Imaging
 ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn, int const ysize, struct filter * const __restrict filterp)
@@ -457,7 +494,7 @@ ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn
 		return NULL;
 	}
 
-{
+
 	for (yy = 0; yy < ysize; yy++) {
 		ymin = xbounds[yy * 2 + 0];
 		ymax = xbounds[yy * 2 + 1];
@@ -465,17 +502,55 @@ ImagingResampleVertical_32bpc(ImagingMemoryInstance const* const __restrict imIn
 		for (xx = 0; xx < imOut->xsize; xx++) {
 			ss = 0.0;
 			for (y = 0; y < ymax; y++)
-				ss += IMAGING_PIXEL_I(imIn, xx, y + ymin) * k[y];
-			IMAGING_PIXEL_I(imOut, xx, yy) = SFM::round_to_u32(SFM::abs(ss));
+				ss += IMAGING_PIXEL_U32(imIn, xx, y + ymin) * k[y];
+			IMAGING_PIXEL_U32(imOut, xx, yy) = (uint32_t)SFM::round_to_u64(SFM::abs(ss));
 		}
 	}
+
+    scalable_free(kk);
+    scalable_free(xbounds);
+    return imOut;
 }
+static Imaging
+ImagingResampleVertical_16bpc(ImagingMemoryInstance const* const __restrict imIn, int const ysize, struct filter* const __restrict filterp)
+{
+    Imaging imOut;
+    double ss;
+    int xx, yy, y, kmax, ymin, ymax;
+    int* xbounds;
+    double* k, * kk;
+
+    kmax = precompute_coeffs(imIn->ysize, ysize, filterp, &xbounds, &kk);
+    if (!kmax) {
+        return (Imaging)ImagingError_MemoryError();
+    }
+
+    imOut = ImagingNew(imIn->mode, imIn->xsize, ysize);
+    if (!imOut) {
+        scalable_free(kk);
+        scalable_free(xbounds);
+        return NULL;
+    }
+
+
+    for (yy = 0; yy < ysize; yy++) {
+        ymin = xbounds[yy * 2 + 0];
+        ymax = xbounds[yy * 2 + 1];
+        k = &kk[yy * kmax];
+        for (xx = 0; xx < imOut->xsize; xx++) {
+            ss = 0.0;
+            for (y = 0; y < ymax; y++)
+                ss += IMAGING_PIXEL_U16(imIn, xx, y + ymin) * k[y];
+            IMAGING_PIXEL_U16(imOut, xx, yy) = (uint16_t)SFM::round_to_u64(SFM::abs(ss));
+        }
+    }
+
     scalable_free(kk);
     scalable_free(xbounds);
     return imOut;
 }
 
-
+// only supports MODE_L, MODE_L16, MODE_BGRX, MODE_BGRA, MODE_U32
 ImagingMemoryInstance* const __restrict __vectorcall
 ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter)
 {
@@ -483,23 +558,31 @@ ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xs
     Imaging (*ResampleHorizontal)(ImagingMemoryInstance const* const __restrict imIn, int const xsize, struct filter * const __restrict filterp);
     Imaging (*ResampleVertical)(ImagingMemoryInstance const* const __restrict imIn, int const xsize, struct filter * const __restrict filterp);
 
-    if ((MODE_L) & imIn->mode)
+    if (IMAGING_TYPE_SPECIAL == imIn->type || ((MODE_1BIT | MODE_LA | MODE_LA16 | MODE_BGRX16 | MODE_BGRA16 | MODE_RGB | MODE_RGB16 | MODE_F32) & imIn->mode)) {
         return (Imaging) ImagingError_ModeError();
-
-    if (IMAGING_TYPE_SPECIAL == imIn->type) {
-        return (Imaging) ImagingError_ModeError();
-    } else if (imIn->image8) {
+    } else if (imIn->image8) { // multiple components (8bpc)
         ResampleHorizontal = ImagingResampleHorizontal_8bpc;
         ResampleVertical = ImagingResampleVertical_8bpc;
     } else {
         switch(imIn->type) {
-            case IMAGING_TYPE_UINT8:
+            case IMAGING_TYPE_UINT8: // multiple components (8bpc)
                 ResampleHorizontal = ImagingResampleHorizontal_8bpc;
                 ResampleVertical = ImagingResampleVertical_8bpc;
                 break;
-            case IMAGING_TYPE_UINT32:
-                ResampleHorizontal = ImagingResampleHorizontal_32bpc;
-                ResampleVertical = ImagingResampleVertical_32bpc;
+            case IMAGING_TYPE_UINT32: // only single component (16bpc)
+
+                if (4 == imIn->pixelsize) {
+                    ResampleHorizontal = ImagingResampleHorizontal_32bpc;
+                    ResampleVertical = ImagingResampleVertical_32bpc;
+                }
+                else if (2 == imIn->pixelsize) {
+                    ResampleHorizontal = ImagingResampleHorizontal_16bpc;
+                    ResampleVertical = ImagingResampleVertical_16bpc;
+                }
+                else {
+                    return (Imaging)ImagingError_ModeError();
+                }
+
                 break;
             default:
                 return (Imaging) ImagingError_ModeError();
