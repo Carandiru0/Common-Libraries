@@ -5,10 +5,7 @@
 
 #include <string_view>
 #include <Math/vec4_t.h>
-
-#if INCLUDE_JPEG_SUPPORT
-#include <tbb/task_group.h>
-#endif
+#include <vector>
 
 // REQUIRES: LIBRARIES TO BE LINKED IN APPLICATION
 // tbb.lib;tbbmalloc.lib;fmt.lib
@@ -157,7 +154,7 @@ typedef struct ImagingHistogram // Histogram for ImagingMemoryInstance
 
 
 // color operations //
-uvec4_v const ImagingSRGBtoLinearVector(uint32_t const packed_srgb);
+uvec4_v const  ImagingSRGBtoLinearVector(uint32_t const packed_srgb);
 uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);
 
 
@@ -183,7 +180,7 @@ void __vectorcall ImagingDelete(ImagingHistogram const* __restrict im);
 
 // SPECIAL FUNCTIONS //
 extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter);
-//extern ImagingSequence* const __restrict __vectorcall		ImagingResample(ImagingSequence const* const __restrict imIn, int const xsize, int const ysize, int const filter); // alternatively for sequences you can specify dimensions in ImagingLoadGIFSequence, which performs resampling to the desired dimensions aswell.
+
 void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im);	// (INPLACE) key[ 0x00b140 ] r g b
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im);
 void __vectorcall ImagingLerpL16(ImagingMemoryInstance* const __restrict A, ImagingMemoryInstance const* const __restrict B, float const tT);
@@ -192,8 +189,11 @@ void __vectorcall ImagingLerp(ImagingMemoryInstance* const __restrict out, Imagi
 void __vectorcall ImagingLUTLerp(ImagingLUT* const __restrict lut_dst, ImagingLUT const* const __restrict lut_src, float const tT);
 void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict im_dst, ImagingMemoryInstance const* const __restrict im_src);
 void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im); // flip Y / invert Y axis / vertical flip (INPLACE)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE)  ** image must be square (width == height)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) ** image must be square (width == height)
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingOffset(ImagingMemoryInstance const* const __restrict im, int const xoffset, int const yoffset); // (NOT INPLACE) **
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance const* const __restrict im); // (NOT INPLACE)  ** 
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance const* const __restrict im); // (NOT INPLACE) ** 
+
 ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im); // (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input. RGB16 images should be converted to BGRX16 first.
                                                                                                                                                     // Tangent space Normal map is standards TS. red X+ (right), green Y+ (down), blue Z+ (near) [set as default coordinate system in ShaderMap (TS)]
                                                                                                                                                     
@@ -229,7 +229,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingGenerateSuperPalette
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawBGRA(std::wstring_view const filenamepath, int const width, int const height);
-ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB16(std::wstring_view const filenamepath, int const width, int const height);
+ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawRGB(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA16(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawLA(std::wstring_view const filenamepath, int const width, int const height);
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadRawL16(std::wstring_view const filenamepath, int const width, int const height);
@@ -254,6 +254,8 @@ ImagingMemoryInstance* const __restrict __vectorcall  ImagingL16L16ToLA16(Imagin
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingF32ToL16(ImagingMemoryInstance const* const __restrict pSrcImageF, double dMin = FLT_MAX, double dMax = -FLT_MAX);
 
 // CONVERSION //
+void                                                  ImagingFastRGBTOBGRX(uint8_t* const __restrict blockOut, uint8_t const* const __restrict blockIn, uint32_t const width, uint32_t const height); // exposed for usage with other buffers, or direct access to two existing Imaging instances' raw data blocks
+void                                                  ImagingFastRGB16TOBGRX16(uint16_t* const __restrict blockOut, uint16_t const* const __restrict blockIn, uint32_t const width, uint32_t const height);
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingRGBToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageRGB);
 ImagingMemoryInstance* const __restrict __vectorcall  ImagingRGB16ToBGRX16(ImagingMemoryInstance const* const __restrict pSrcImageRGB16);
 
@@ -274,15 +276,10 @@ void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance c
 
 // CONVERSION //
 void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im); // Red and Blue component swap (INPLACE)
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_8To16(ImagingMemoryInstance const* const __restrict pSrcImageL);
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To8(ImagingMemoryInstance const* const __restrict pSrcImageL);
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To32(ImagingMemoryInstance const* const __restrict pSrcImageL); // (NOT INPLACE)   // **** uses tbb (parallel) **** -- 16bit images must be upscaled to 32bit before any resampling. then the grayscale image should be converted back to 16 bits only at the end of what ever filter process is taking place.
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_32To16(ImagingMemoryInstance const* const __restrict pSrcImageL);
 
 // SAVING //
 bool const __vectorcall ImagingSaveLUT(ImagingLUT const* const __restrict lut, std::string_view const title, std::wstring_view const cubefilenamepath);
 bool const __vectorcall ImagingSaveRaw(ImagingMemoryInstance const* const __restrict pSrcImage, std::wstring_view const filenamepath);
-#define ImagingSaveRaw8bit ImagingSaveRaw
 
 // only MODE_L and MODE_RGB seem to work when saving JPEGS
 #if INCLUDE_JPEG_SUPPORT
@@ -304,6 +301,293 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingCompressBGRAToBC7(Im
 
 
 
+// Extra, *public* KTX/KTX2 Imaging Interface
+
+/// Scale a value by mip level, but do not reduce to zero.
+inline uint32_t const mipScale(uint32_t const value, uint32_t const mipLevel) {
+	return std::max(value >> mipLevel, (uint32_t)1);
+}
+/// KTX files use OpenGL format values. This converts some common ones to Vulkan equivalents.
+static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
+
+uint32_t const GLtoVKFormat(uint32_t const glFormat);
+eIMAGINGMODE const VKtoImagingMode(uint32_t const vkFormat);
+
+enum KTX_VERSION
+{
+	KTX1 = 1,
+	KTX2 = 2
+};
+
+/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
+template<uint32_t const version = KTX_VERSION::KTX1>  // KTX "1"  or  KTX "2"
+class KTXFileLayout {
+
+public:
+	KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end)
+	{
+		uint8_t const* p = begin;
+
+		if constexpr (KTX_VERSION::KTX1 == version) {
+
+			if (p + sizeof(Header) > end) return;
+
+			header_data.v1 = *(Header*)p;
+
+			static constexpr uint8_t magic[] = {
+				0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A // KTX1
+			};
+
+			if (memcmp(magic, header_data.v1.identifier, sizeof(magic))) {
+				return;
+			}
+
+			static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
+			if (KTX_ENDIAN_REF != header_data.v1.endianness) {
+				swap(header_data.v1.glType);
+				swap(header_data.v1.glTypeSize);
+				swap(header_data.v1.glFormat);
+				swap(header_data.v1.glInternalFormat);
+				swap(header_data.v1.glBaseInternalFormat);
+				swap(header_data.v1.pixelWidth);
+				swap(header_data.v1.pixelHeight);
+				swap(header_data.v1.pixelDepth);
+				swap(header_data.v1.numberOfArrayElements);
+				swap(header_data.v1.numberOfFaces);
+				swap(header_data.v1.numberOfMipmapLevels);
+				swap(header_data.v1.bytesOfKeyValueData);
+			}
+
+			header_data.v1.numberOfArrayElements = std::max(1U, header_data.v1.numberOfArrayElements);
+			header_data.v1.numberOfFaces = std::max(1U, header_data.v1.numberOfFaces);
+			header_data.v1.numberOfMipmapLevels = std::max(1U, header_data.v1.numberOfMipmapLevels);
+			header_data.v1.pixelDepth = std::max(1U, header_data.v1.pixelDepth);
+
+			vkformat_ = GLtoVKFormat(header_data.v1.glInternalFormat);
+			if (!vkformat_) return;
+			format_ = VKtoImagingMode(vkformat_);
+
+			p += sizeof(Header);
+			if (p + header_data.v1.bytesOfKeyValueData > end) return;
+			p += header_data.v1.bytesOfKeyValueData;
+
+			for (uint32_t mipLevel = 0; mipLevel != header_data.v1.numberOfMipmapLevels; ++mipLevel) {
+
+				// bugfix for arraylayers and faces not being factored into final size for this mip
+				uint32_t layerImageSize;
+				if (header_data.v1.numberOfArrayElements > 1) { // avoid div by zero
+					layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+				}
+				else if (header_data.v1.numberOfFaces > 1) {
+					header_data.v1.numberOfArrayElements = header_data.v1.numberOfFaces; header_data.v1.numberOfFaces = 1;
+					layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
+				}
+				else {
+					layerImageSize = *(uint32_t*)(p);
+				}
+
+				layerImageSize = (layerImageSize + 3) & ~3;
+				if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(layerImageSize);
+
+				layerImageSizes_.push_back(layerImageSize);
+
+				uint32_t imageSize = layerImageSize * header_data.v1.numberOfFaces * header_data.v1.numberOfArrayElements;
+
+				imageSize = (imageSize + 3) & ~3;
+				if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(imageSize);
+
+				imageSizes_.push_back(imageSize);
+
+				p += 4; // offset for reading layer imagesize above
+				imageOffsets_.push_back((uint32_t)(p - begin));
+
+				if (p + imageSize > end) {
+					// see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
+					// fix bugs... https://github.com/dariomanesku/cmft/issues/29
+					header_data.v1.numberOfMipmapLevels = mipLevel + 1;
+					break;
+				}
+				p += imageSize; // next mip offset if there is one
+			}
+		}
+		else { // KTX2
+
+			if (p + sizeof(HeaderV2) > end) return;
+
+			header_data.v2 = *(HeaderV2*)p;
+
+			static constexpr uint8_t magic[] = {
+				0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A  // KTX2
+			};
+
+			if (memcmp(magic, header_data.v2.identifier, sizeof(magic))) {
+				return;
+			}
+
+			header_data.v2.numberOfArrayElements = std::max(1U, header_data.v2.numberOfArrayElements);
+			header_data.v2.numberOfFaces = std::max(1U, header_data.v2.numberOfFaces);
+			header_data.v2.numberOfMipmapLevels = std::max(1U, header_data.v2.numberOfMipmapLevels);
+			header_data.v2.pixelDepth = std::max(1U, header_data.v2.pixelDepth);
+
+			vkformat_ = header_data.v2.format;
+			if (!vkformat_) return;
+			format_ = VKtoImagingMode(vkformat_);
+
+			p += sizeof(HeaderV2);
+
+			uint32_t imageOffset((uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength)); // ktx2 image data start offset
+
+			for (uint32_t mipLevel = 0; mipLevel != header_data.v2.numberOfMipmapLevels; ++mipLevel) {
+
+				p += 16; // skip byte offset & length, now on mip image image size
+
+				// bugfix for arraylayers and faces not being factored into final size for this mip
+				uint32_t layerImageSize;
+				if (header_data.v2.numberOfArrayElements > 1) { // avoid div by zero
+					layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+				}
+				else if (header_data.v2.numberOfFaces > 1) {
+					header_data.v2.numberOfArrayElements = header_data.v2.numberOfFaces; header_data.v2.numberOfFaces = 1;
+					layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
+				}
+				else {
+					layerImageSize = *(uint32_t*)(p);
+				}
+
+				layerImageSize = (layerImageSize + 3) & ~3;
+				layerImageSizes_.push_back(layerImageSize);
+
+				uint32_t imageSize = layerImageSize * header_data.v2.numberOfFaces * header_data.v2.numberOfArrayElements;
+
+				imageSize = (imageSize + 3) & ~3;
+				imageSizes_.push_back(imageSize);
+
+				p += 8; // offset for reading layer imagesize above
+				imageOffsets_.push_back(imageOffset); // relative to start of image data in ktx v2
+				imageOffset += imageSize;
+			}
+		}
+		ok_ = true;
+	}
+
+	uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
+
+		if constexpr (KTX_VERSION::KTX2 == version) {
+			return imageOffsets_[mipLevel] + (arrayLayer * header_data.v2.numberOfFaces + face) * layerImageSizes_[mipLevel];
+		}
+
+		return imageOffsets_[mipLevel] + (arrayLayer * header_data.v1.numberOfFaces + face) * layerImageSizes_[mipLevel];
+	}
+
+	uint32_t const size(uint32_t const mipLevel) const {
+		return imageSizes_[mipLevel];
+	}
+	std::vector<uint32_t> const& sizes() const { return(imageSizes_); }
+
+	uint32_t const layer_size(uint32_t const mipLevel) const {
+		return layerImageSizes_[mipLevel];
+	}
+	std::vector<uint32_t> const& layer_sizes() const { return(layerImageSizes_); }
+
+	bool const         ok() const { return ok_; }
+	eIMAGINGMODE const format() const { return format_; }
+	uint32_t const     vkformat() const { return vkformat_; } // can be cast to vk::Format by user
+	uint32_t const     mipLevels() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
+	uint32_t const     arrayLayers() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
+	uint32_t const     width(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
+	uint32_t const     height(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
+	uint32_t const     depth(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
+
+	// only these image formats are supported natively for ktx to Imaging, **only the first miplevel is uploaded to an ImagingMemoryInstance**
+	ImagingMemoryInstance* const __restrict upload(uint8_t const* const __restrict pFileBegin) const {
+
+		switch (format()) 
+		{
+		case MODE_BGRA16:
+			return(ImagingLoadFromMemoryBGRA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		case MODE_RGB16: // promote to BGRX16, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
+		{
+			Imaging image(ImagingLoadFromMemoryRGB16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			Imaging const promoted_image(ImagingRGB16ToBGRX16(image));
+			ImagingDelete(image); image = nullptr;
+			return(promoted_image);
+		}
+		case MODE_BGRA:
+			return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		case MODE_RGB: // promote to BGRX, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
+		{
+			Imaging image(ImagingLoadFromMemoryRGB(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			Imaging const promoted_image(ImagingRGBToBGRX(image));
+			ImagingDelete(image); image = nullptr;
+			return(promoted_image);
+		}
+		case MODE_LA16:
+			return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		case MODE_LA:
+			return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		case MODE_L16:
+			return(ImagingLoadFromMemoryL16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		case MODE_L:
+			return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+		default:
+			break;
+		}
+
+		return(nullptr);
+	}
+private:
+	static inline void swap(uint32_t& value) {
+		value = value >> 24 | (value & 0xff0000) >> 8 | (value & 0xff00) << 8 | value << 24;
+	}
+
+	struct Header {
+		uint8_t identifier[12];
+		uint32_t endianness;
+		uint32_t glType;
+		uint32_t glTypeSize;
+		uint32_t glFormat;
+		uint32_t glInternalFormat;
+		uint32_t glBaseInternalFormat;
+		uint32_t pixelWidth;
+		uint32_t pixelHeight;
+		uint32_t pixelDepth;
+		uint32_t numberOfArrayElements;
+		uint32_t numberOfFaces;
+		uint32_t numberOfMipmapLevels;
+		uint32_t bytesOfKeyValueData;
+	};
+
+	struct HeaderV2 {
+		uint8_t identifier[12];
+		uint32_t format;
+		uint32_t typeSize;
+		uint32_t pixelWidth;
+		uint32_t pixelHeight;
+		uint32_t pixelDepth;
+		uint32_t numberOfArrayElements; // layer count / number of array elements
+		uint32_t numberOfFaces;
+		uint32_t numberOfMipmapLevels;
+		uint32_t supercompressionScheme;
+		uint32_t dfdOffset;
+		uint32_t dfdLength;
+		uint32_t kvdOffset;
+		uint32_t kvdLength;
+		uint64_t sgdOffset;
+		uint64_t sgdLength;
+	};
+
+	struct {
+		Header   v1{};
+		HeaderV2 v2{};
+	} header_data{};
+
+	eIMAGINGMODE format_;
+	uint32_t vkformat_; // aka. vk::Format
+	bool ok_ = false;
+	std::vector<uint32_t> imageOffsets_;
+	std::vector<uint32_t> imageSizes_;
+	std::vector<uint32_t> layerImageSizes_;
+};
 
 
 

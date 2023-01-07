@@ -189,6 +189,46 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	static constexpr double const GOLDEN_RATIO = std::numbers::phi; // don't change, type purposely double
 	static constexpr double const GOLDEN_RATIO_ZERO = (GOLDEN_RATIO - 1.0);
 
+	// replacements for avx2 _mm256_slli_si256, _mm256_slli_si256 for when a full 256bit register needs to be shifted
+	// the avx2 functions only work on two 128bit "halves" unlike _mm_slli_si128 or _mm_srli_si128 which operates on a full vector of 128bits....
+	// see: https://stackoverflow.com/questions/25248766/emulating-shifts-on-32-bytes-with-avx
+	template<int const bytes>
+	STATIC_INLINE_PURE __m256i const __vectorcall _mm256_shift_left(__m256i const A)
+	{
+		if constexpr (0 != bytes) {
+
+			if constexpr (bytes < 16) {
+				return(_mm256_alignr_epi8(A, _mm256_permute2x128_si256(A, A, _MM_SHUFFLE(0, 0, 2, 0)), (uint8_t)(16 - bytes)));
+			}
+			else if constexpr (16 == bytes) {
+				return(_mm256_permute2x128_si256(A, A, _MM_SHUFFLE(0, 0, 2, 0)));
+			}
+			else { // bytes > 16
+				return(_mm256_slli_si256(_mm256_permute2x128_si256(A, A, _MM_SHUFFLE(0, 0, 2, 0)), (uint8_t)(bytes - 16)));
+			}
+		}
+
+		return(A); // 0 == bytes default
+	}
+	template<int const bytes>
+	STATIC_INLINE_PURE __m256i const __vectorcall _mm256_shift_right(__m256i const A)
+	{
+		if constexpr (0 != bytes) {
+
+			if constexpr (bytes < 16) {
+				return(_mm256_alignr_epi8(A, _mm256_permute2x128_si256(A, A, _MM_SHUFFLE(2, 0, 0, 1)), (uint8_t)(bytes)));
+			}
+			else if constexpr (16 == bytes) {
+				return(_mm256_permute2x128_si256(A, A, _MM_SHUFFLE(2, 0, 0, 1)));
+			}
+			else { // bytes > 16
+				return(_mm256_slli_si256(_mm256_permute2x128_si256(A, A, _MM_SHUFFLE(2, 0, 0, 1)), (uint8_t)(bytes - 16)));
+			}
+		}
+
+		return(A); // 0 == bytes default
+	}
+
 #define VCONST extern inline const constexpr __declspec(selectany)
 	const struct alignas(16) v_const
 	{
@@ -445,6 +485,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		return( sqrt_helper(x, 0ULL, (x >> 1ULL) + 1ULL) );
 	}
 
+	STATIC_INLINE_PURE double const __vectorcall __sqrt(double const A) // faster square root
+	{
+		return(_mm_cvtsd_f64(_mm256_castpd256_pd128(_mm256_sqrt_pd(_mm256_set1_pd(A)))));
+	}
 	STATIC_INLINE_PURE float const __vectorcall __sqrt(float const A) // faster square root
 	{
 		return(_mm_cvtss_f32(_mm256_castps256_ps128(_mm256_sqrt_ps(_mm256_set1_ps(A)))));
@@ -616,15 +660,27 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 	// signed fract, fract, mod & sgn:
 	//
+	STATIC_INLINE_PURE __m128d const __vectorcall sfract(__m128d const Sn)
+	{
+		return(_mm_sub_pd(Sn, _mm_round_pd(Sn, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));	// faster signed fractional part
+	}
 	STATIC_INLINE_PURE XMVECTOR const __vectorcall sfract(FXMVECTOR const Sn)
 	{
 		return(_mm_sub_ps(Sn, _mm_round_ps(Sn, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC)));	// faster signed fractional part
+	}
+	STATIC_INLINE_PURE double const __vectorcall sfract(double const Sn)
+	{
+		return(_mm_cvtsd_f64(sfract(_mm_set1_pd(Sn))));	// faster signed fractional part
 	}
 	STATIC_INLINE_PURE float const __vectorcall sfract(float const Sn)
 	{
 		return(_mm_cvtss_f32(sfract(_mm_set1_ps(Sn))));	// faster signed fractional part
 	}
 
+	STATIC_INLINE_PURE double const __vectorcall fract(double const Sn)
+	{
+		return(SFM::abs(sfract(Sn)));	// faster unsigned fractional part
+	}
 	STATIC_INLINE_PURE float const __vectorcall fract(float const Sn)
 	{
 		return(SFM::abs(sfract(Sn)));	// faster unsigned fractional part
@@ -703,6 +759,12 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 
 	// triangle wave - for converting a linear [0.0f ... 1.0f] range to a triangular version mapping to [0.0f ... 0.5f] = [0.0f ... 1.0f] then [0.5f ... 0.0f] = [1.0f ... 0.0f]
+	STATIC_INLINE_PURE double const __vectorcall triangle_wave(double const A, double const B, double const tNorm)
+	{
+		double const t = SFM::abs(SFM::fract(tNorm) * 2.0 - 1.0);
+
+		return(lerp(A, B, t));
+	}
 	STATIC_INLINE_PURE float const __vectorcall triangle_wave(float const A, float const B, float const tNorm)
 	{
 		float const t = SFM::abs(SFM::fract(tNorm) * 2.0f - 1.0f);

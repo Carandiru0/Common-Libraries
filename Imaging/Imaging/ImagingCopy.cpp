@@ -21,6 +21,7 @@ namespace fs = std::filesystem;
 #if INCLUDE_JPEG_SUPPORT
 #include "jpeglib.h"
 #endif
+
 #include <Compressonator.h>
 #include <tbb/scalable_allocator.h>
 #include <Utility/mio/mmap.hpp>
@@ -30,7 +31,7 @@ namespace fs = std::filesystem;
 #pragma intrinsic(memset)
 
 #define IMAGING_LIMIT_184K (184320ull)
-#define IMAGING_LIMIT_16K (16386ull)
+//#define IMAGING_LIMIT_16K (16384ull)
 
 #ifdef IMAGING_LIMIT_184K
 #define IMAGING_LIMIT (IMAGING_LIMIT_184K + 1ull)
@@ -104,8 +105,8 @@ ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ys
 		im->pixelsize = 3;
 		break;
 	case MODE_BGRX:
-		/* 32-bit true colour images with padding */
-		im->bands = 3;
+		/* 32-bit true colour images with unused alpha */
+		im->bands = 4;
 		im->pixelsize = 4;
 		break;
 	case MODE_BGRA:
@@ -120,7 +121,7 @@ ImagingNewPrologueSubtype(eIMAGINGMODE const mode, int const xsize, int const ys
 		break;
 	case MODE_BGRX16:
 		/* 16-bit bpc */
-		im->bands = 3;
+		im->bands = 4;
 		im->pixelsize = 8;
 		im->type = IMAGING_TYPE_UINT64;
 		break;
@@ -615,8 +616,8 @@ namespace dithering {
 } // end ns
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im)
 {
-	uint32_t const height(im->ysize);
 	uint32_t const width(im->xsize);
+	uint32_t const height(im->ysize);
 
 	uint32_t* const __restrict block(reinterpret_cast<uint32_t* const>(im->block));
 
@@ -822,7 +823,7 @@ void __vectorcall ImagingBlend(ImagingMemoryInstance* const __restrict A, Imagin
 	}
 }
 
-void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im) // flip Y / invert Y axis / vertical flip (INPLACE
+void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im) // flip Y / invert Y axis / vertical flip (INPLACE)
 {
 	size_t const stride = (size_t const)im->linesize;
 	size_t const height = (size_t const)im->ysize;
@@ -845,46 +846,170 @@ void __vectorcall ImagingVerticalFlip(ImagingMemoryInstance* const __restrict im
 	}
 }
 
+STATIC_INLINE_PURE uint32_t const wrap(int const n, int const dimension)
+{
+	return(SFM::abs(n % dimension));
+}
+
+template<typename T>
+STATIC_INLINE_PURE ImagingMemoryInstance* const __restrict __vectorcall ImagingOffset(ImagingMemoryInstance const* const __restrict im, int const xoffset, int const yoffset)
+{
+	Imaging const img_offset(ImagingCopy(im));
+
+	int32_t const width(im->xsize);
+	int32_t const height(im->ysize);
+
+	T const* const __restrict blockIn(reinterpret_cast<T const* const __restrict>(im->block));
+	T* const __restrict blockOut(reinterpret_cast<T* const __restrict>(img_offset->block));
+
+	for (int32_t y = 0; y < height; ++y) {
+
+		uint32_t const out_y(wrap(y + yoffset, height));
+
+		for (int32_t x = 0; x < width; ++x) {
+
+			uint32_t const out_x(wrap(x + xoffset, width));
+
+			blockOut[out_y * width + out_x] = blockIn[y * width + x];
+		}
+	}
+
+	return(img_offset);
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingOffset(ImagingMemoryInstance const* const __restrict im, int const xoffset, int const yoffset) // translate image while wrapping around (*NOT INPLACE)
+{
+	eIMAGINGMODE const mode(im->mode);
+
+	switch (mode)
+	{
+	case MODE_L:
+		return(ImagingOffset<uint8_t>(im, xoffset, yoffset));
+
+	case MODE_LA:
+	case MODE_L16:
+		return(ImagingOffset<uint16_t>(im, xoffset, yoffset));
+
+	case MODE_BGRX16:
+	case MODE_BGRA16:
+		return(ImagingOffset<uint64_t>(im, xoffset, yoffset));
+
+	case MODE_LA16:
+	case MODE_BGRX:
+	case MODE_BGRA:
+	default:
+		return(ImagingOffset<uint32_t>(im, xoffset, yoffset));
+	}
+
+	return(nullptr);
+}
+
 // image[y][x] // assuming this is the original orientation 
 // image[x][original_width - y] // rotated 90 degrees ccw
 // image[original_height - x][y] // 90 degrees cw 
 // image[original_height - y][original_width - x] // 180 degrees
-ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance* const __restrict im)
+
+template<typename T>
+STATIC_INLINE_PURE void ImagingRotateCW(ImagingMemoryInstance* const __restrict img_returned, ImagingMemoryInstance const* const __restrict im,
+	                                    uint32_t const width, uint32_t const height)
 {
-	uint32_t const height(im->ysize);
-	uint32_t const width(im->xsize);
-
-	Imaging img_returned(ImagingNew(im->mode, width, height));
-
-	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
-	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
+	T* const __restrict blockOut(reinterpret_cast<T* const __restrict>(img_returned->block));
+	T const* const __restrict blockIn(reinterpret_cast<T const* const __restrict>(im->block));
 
 	for (uint32_t y = 0; y < height; ++y) {
 
 		for (uint32_t x = 0; x < width; ++x) {
 
-			blockOut[(height - 1 - x) * width + y] = blockIn[y * width + x]; // image[original_height - x][y] // 90 degrees cw 
+			uint32_t const out_x((height - 1) - y);
+			uint32_t const out_y(x);
+			blockOut[out_y * height + out_x] = blockIn[y * width + x]; // image[x][original_width - y] // rotated 90 degrees ccw
 		}
+	}
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCW(ImagingMemoryInstance const* const __restrict im)
+{
+	uint32_t const width(im->xsize);
+	uint32_t const height(im->ysize);
+
+	eIMAGINGMODE const mode(im->mode);
+	Imaging img_returned(ImagingNew(mode, height, width));
+
+	switch (mode)
+	{
+	case MODE_L:
+		ImagingRotateCW<uint8_t>(img_returned, im, width, height);
+		break;
+
+	case MODE_LA:
+	case MODE_L16:
+		ImagingRotateCW<uint16_t>(img_returned, im, width, height);
+		break;
+	
+	case MODE_BGRX16:
+	case MODE_BGRA16:
+		ImagingRotateCW<uint64_t>(img_returned, im, width, height);
+		break;
+
+	case MODE_LA16:
+	case MODE_BGRX:
+	case MODE_BGRA:
+	default:
+		ImagingRotateCW<uint32_t>(img_returned, im, width, height);
+		break;
 	}
 
 	return(img_returned);
 }
-ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance* const __restrict im)
+
+template<typename T>
+STATIC_INLINE_PURE void ImagingRotateCCW(ImagingMemoryInstance* const __restrict img_returned, ImagingMemoryInstance const* const __restrict im,
+	                                     uint32_t const width, uint32_t const height)
 {
-	uint32_t const height(im->ysize);
-	uint32_t const width(im->xsize);
-
-	Imaging img_returned(ImagingNew(im->mode, width, height));
-
-	uint32_t* const __restrict blockOut(reinterpret_cast<uint32_t* const>(img_returned->block));
-	uint32_t const* const __restrict blockIn(reinterpret_cast<uint32_t const* const>(im->block));
+	T* const __restrict blockOut(reinterpret_cast<T* const __restrict>(img_returned->block));
+	T const* const __restrict blockIn(reinterpret_cast<T const* const __restrict>(im->block));
 
 	for (uint32_t y = 0; y < height; ++y) {
 
 		for (uint32_t x = 0; x < width; ++x) {
 
-			blockOut[x * width + (width - 1 - y)] = blockIn[y * width + x]; // image[x][original_width - y] // rotated 90 degrees ccw
+			uint32_t const out_x(y);
+			uint32_t const out_y((width - 1) - x);
+			blockOut[out_y * height + out_x] = blockIn[y * width + x]; // image[x][original_width - y] // rotated 90 degrees ccw
 		}
+	}
+}
+
+ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMemoryInstance const* const __restrict im)
+{
+	uint32_t const width(im->xsize);
+	uint32_t const height(im->ysize);
+
+	eIMAGINGMODE const mode(im->mode);
+	Imaging img_returned(ImagingNew(mode, height, width));
+
+	switch (mode)
+	{
+	case MODE_L:
+		ImagingRotateCCW<uint8_t>(img_returned, im, width, height);
+		break;
+
+	case MODE_LA:
+	case MODE_L16:
+		ImagingRotateCCW<uint16_t>(img_returned, im, width, height);
+		break;
+
+	case MODE_BGRX16:
+	case MODE_BGRA16:
+		ImagingRotateCCW<uint64_t>(img_returned, im, width, height);
+		break;
+
+	case MODE_LA16:
+	case MODE_BGRX:
+	case MODE_BGRA:
+	default:
+		ImagingRotateCCW<uint32_t>(img_returned, im, width, height);
+		break;
 	}
 
 	return(img_returned);
@@ -893,8 +1018,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRotateCCW(ImagingMem
 // (NOT INPLACE) - new image returned of LA16 type, requires normal map of type BGRA16 input.
 ImagingMemoryInstance* const __restrict __vectorcall ImagingTangentSpaceNormalMapToDerivativeMapBGRA16(ImagingMemoryInstance* const __restrict im)
 {
-	uint32_t const height(im->ysize);
 	uint32_t const width(im->xsize);
+	uint32_t const height(im->ysize);
 	 
 	Imaging img_returned(ImagingNew(MODE_LA16, width, height));
 
@@ -1634,8 +1759,8 @@ void __vectorcall ImagingCopyRaw(void* const pDstMemory, ImagingMemoryInstance c
 
 void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
 {
-	uint32_t const height(im->ysize);
 	uint32_t const width(im->xsize);
+	uint32_t const height(im->ysize);
 
 	uint32_t* const __restrict block(reinterpret_cast<uint32_t* const>(im->block));
 
@@ -1651,136 +1776,6 @@ void __vectorcall ImagingSwapRB(ImagingMemoryInstance* const __restrict im)
 			block[pixel] = SFM::pack_rgba(rgba_dst.b, rgba_dst.g, rgba_dst.r, rgba_dst.a);
 		}
 	}
-}
-
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_8To16(ImagingMemoryInstance const* const __restrict pSrcImage)
-{
-	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L16, pSrcImage->xsize, pSrcImage->ysize);
-
-	struct { // avoid lambda heap
-		uint8_t const* const* const __restrict image_in;
-		uint16_t* const* const __restrict       image_out;
-		int const size;
-
-	} const p = { (uint8_t**)pSrcImage->image, (uint16_t**)imageL->image32, imageL->xsize };
-
-
-	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
-
-		int x = p.size - 1;
-		uint8_t const* __restrict pIn(p.image_in[y]);
-		uint16_t* __restrict pOut(p.image_out[y]);
-		do {
-
-			uint32_t value = 0xffu & *pIn;
-
-			*pOut = (value << 8u);
-
-			++pOut;
-			++pIn;
-
-		} while (--x >= 0);
-
-		});
-
-	return(imageL);
-}
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To8(ImagingMemoryInstance const* const __restrict pSrcImage)
-{
-	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L, pSrcImage->xsize, pSrcImage->ysize);
-
-	struct { // avoid lambda heap
-		uint16_t const* const* const __restrict image_in;
-		uint8_t* const* const __restrict       image_out;
-		int const size;
-
-	} const p = { (uint16_t**)pSrcImage->image32, (uint8_t**)imageL->image, imageL->xsize };
-
-
-	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
-
-		int x = p.size - 1;
-		uint16_t const* __restrict pIn(p.image_in[y]);
-		uint8_t* __restrict pOut(p.image_out[y]);
-		do {
-
-			uint32_t value = *pIn;
-
-			*pOut = 0xffu & (value >> 8u);
-
-			++pOut;
-			++pIn;
-
-		} while (--x >= 0);
-
-		});
-
-	return(imageL);
-}
-
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_16To32(ImagingMemoryInstance const* const __restrict pSrcImage)
-{
-	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_U32, pSrcImage->xsize, pSrcImage->ysize);
-
-	struct { // avoid lambda heap
-		uint16_t const* const* const __restrict image_in;
-		uint32_t* const* const __restrict       image_out;
-		int const size;
-
-	} const p = { (uint16_t**)pSrcImage->image32, (uint32_t**)imageL->image32, imageL->xsize };
-
-
-	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
-
-		int x = p.size - 1;
-		uint16_t const* __restrict pIn(p.image_in[y]);
-		uint32_t* __restrict pOut(p.image_out[y]);
-		do {
-
-			uint32_t value = 0xffffu & *pIn;
-
-			*pOut = (value << 16u);
-
-			++pOut;
-			++pIn;
-
-		} while (--x >= 0);
-
-	});
-
-	return(imageL);
-}
-ImagingMemoryInstance* const __restrict __vectorcall ImagingBits_32To16(ImagingMemoryInstance const* const __restrict pSrcImage)
-{
-	ImagingMemoryInstance* const __restrict imageL = ImagingNew(eIMAGINGMODE::MODE_L16, pSrcImage->xsize, pSrcImage->ysize);
-
-	struct { // avoid lambda heap
-		uint32_t const* const* const __restrict image_in;
-		uint16_t* const* const __restrict       image_out;
-		int const size;
-
-	} const p = { (uint32_t**)pSrcImage->image32, (uint16_t**)imageL->image32, imageL->xsize };
-
-
-	tbb::parallel_for(int(0), imageL->ysize, [&p](int const y) {
-
-		int x = p.size - 1;
-		uint32_t const* __restrict pIn(p.image_in[y]);
-		uint16_t* __restrict pOut(p.image_out[y]);
-		do {
-
-			uint32_t value = *pIn;
-
-			*pOut = 0xffffu & (value >> 16u);
-
-			++pOut;
-			++pIn;
-
-		} while (--x >= 0);
-
-		});
-
-	return(imageL);
 }
 
 // dMin, dMax are optional - by default the range is automatically determined by the images data min/max
@@ -1914,15 +1909,47 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingL16L16ToLA16(Imaging
 
 	return(returnLA16);
 }
-
+// residual pixels
 STATIC_INLINE_PURE void convertRGBToBGRX(uint8_t* const __restrict dst, uint8_t const* const __restrict src, uint32_t const pixel_count)
 {
 	// compiler will optimize this simple loop //
-	for (uint32_t i = 0; i < pixel_count; i++) {
+	for (uint32_t i = 0; i < pixel_count; ++i) {
 		dst[4 * i] = src[3 * i];
 		dst[4 * i + 1] = src[3 * i + 1];
 		dst[4 * i + 2] = src[3 * i + 2];
+		dst[4 * i + 3] = 0xff; // opaque
 	}
+}
+STATIC_INLINE_PURE void convertRGB16ToBGRX16(uint16_t* const __restrict dst, uint16_t const* const __restrict src, uint32_t const pixel_count)
+{
+	// compiler will optimize this simple loop //
+	for (uint32_t i = 0; i < pixel_count; ++i) {
+		dst[4 * i] = src[3 * i];
+		dst[4 * i + 1] = src[3 * i + 1];
+		dst[4 * i + 2] = src[3 * i + 2];
+		dst[4 * i + 3] = 0xffff; // opaque
+	}
+}
+
+void ImagingFastRGBTOBGRX(uint8_t* const __restrict blockOut, uint8_t const* const __restrict blockIn, uint32_t const width, uint32_t const height) // exposed for usage with other buffers, or direct access to two existing Imaging instances' raw data blocks
+{
+	// each line is done in parallel
+	tbb::parallel_for(uint32_t(0), height, [blockOut, blockIn, width](uint32_t const y) {
+
+		uint32_t const row(y * width);
+		convertRGBToBGRX(blockOut + row * 4, blockIn + row * 3, width);
+
+	});
+}
+void ImagingFastRGB16TOBGRX16(uint16_t* const __restrict blockOut, uint16_t const* const __restrict blockIn, uint32_t const width, uint32_t const height)
+{
+	// each line is done in parallel
+	tbb::parallel_for(uint32_t(0), height, [blockOut, blockIn, width](uint32_t const y) {
+
+		uint32_t const row(y * width);
+	    convertRGB16ToBGRX16(blockOut + row * 4, blockIn + row * 3, width);
+
+	});
 }
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRGBToBGRX(ImagingMemoryInstance const* const __restrict pSrcImageRGB)
@@ -1931,20 +1958,12 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRGBToBGRX(ImagingMem
 
 	Imaging returnBGRX(ImagingNew(MODE_BGRX, width, height));
 
-	convertRGBToBGRX(returnBGRX->block, pSrcImageRGB->block, width*height);
+	ImagingFastRGBTOBGRX(returnBGRX->block, pSrcImageRGB->block, width, height);
 
 	return(returnBGRX);
 }
 
-STATIC_INLINE_PURE void convertRGB16ToBGRX16(uint16_t* const __restrict dst, uint16_t const* const __restrict src, uint32_t const pixel_count)
-{
-	// compiler will optimize this simple loop //
-	for (uint32_t i = 0; i < pixel_count; i++) {
-		dst[4 * i] = src[3 * i];
-		dst[4 * i + 1] = src[3 * i + 1];
-		dst[4 * i + 2] = src[3 * i + 2];
-	}
-}
+
 
 ImagingMemoryInstance* const __restrict __vectorcall ImagingRGB16ToBGRX16(ImagingMemoryInstance const* const __restrict pSrcImageRGB16)
 {
@@ -1952,7 +1971,7 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingRGB16ToBGRX16(Imagin
 
 	Imaging returnBGRX16(ImagingNew(MODE_BGRX16, width, height));
 
-	convertRGB16ToBGRX16(reinterpret_cast<uint16_t* const __restrict>(returnBGRX16->block), reinterpret_cast<uint16_t* const __restrict>(pSrcImageRGB16->block), width * height);
+	ImagingFastRGB16TOBGRX16(reinterpret_cast<uint16_t* const __restrict>(returnBGRX16->block), reinterpret_cast<uint16_t* const __restrict>(pSrcImageRGB16->block), width, height);
 
 	return(returnBGRX16);
 }
@@ -2222,6 +2241,14 @@ bool const __vectorcall ImagingSaveToTif(ImagingMemoryInstance const* const __re
 
 		switch (pSrcImage->mode)
 		{
+		case MODE_L:
+			interpret = TinyTIFFWriter_Greyscale;
+			bits = 8;
+			break;
+		case MODE_LA:
+			interpret = TinyTIFFWriter_GreyscaleAndAlpha;
+			bits = 8;
+			break;
 		case MODE_L16:
 			interpret = TinyTIFFWriter_Greyscale;
 			bits = 16;
@@ -2234,14 +2261,6 @@ bool const __vectorcall ImagingSaveToTif(ImagingMemoryInstance const* const __re
 		case MODE_BGRA16:
 			interpret = TinyTIFFWriter_RGBA;
 			bits = 16;
-			break;
-		case MODE_L:
-			interpret = TinyTIFFWriter_Greyscale;
-			bits = 8;
-			break;
-		case MODE_LA:
-			interpret = TinyTIFFWriter_GreyscaleAndAlpha;
-			bits = 8;
 			break;
 		case MODE_BGRX:
 		case MODE_BGRA:
@@ -2320,14 +2339,14 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 
 	FILE* fOut;
 
-	if (((MODE_L|MODE_LA|MODE_L16|MODE_LA16|MODE_BGRX|MODE_BGRA|MODE_BGRA16) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
+	if (((MODE_L|MODE_LA|MODE_L16|MODE_LA16|MODE_BGRX|MODE_BGRA|MODE_BGRX16|MODE_BGRA16) & pSrcImage->mode) && 0 == _wfopen_s(&fOut, filenamepath.data(), L"wbS"))
 	{
 		KtxHeader header = {};
 		memcpy(header.identifier, ktx_magic_id, 12);
 
 		header.endianness = KTX_ENDIAN_REF;
 
-		if ((MODE_L16 | MODE_LA16 | MODE_BGRA16) & pSrcImage->mode)
+		if ((MODE_L16 | MODE_LA16 | MODE_BGRX16 | MODE_BGRA16) & pSrcImage->mode)
 			header.glType = KTX_UNSIGNED_SHORT; //  For compressed formats, type=0.
 		else
 			header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
@@ -2353,6 +2372,7 @@ bool const __vectorcall ImagingSaveToKTX(ImagingMemoryInstance const* const __re
 			header.glInternalFormat = KTX_RG16;
 			break;
 		case MODE_BGRA16:
+		case MODE_BGRX16:
 			header.glFormat = header.glBaseInternalFormat = KTX__RGBA;
 			header.glInternalFormat = KTX_RGBA16;
 			break;
@@ -2427,11 +2447,11 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 	KtxHeader header = {};
 	memcpy(header.identifier, ktx_magic_id, 12);
 
-	if (((MODE_L | MODE_LA | MODE_L16 | MODE_LA16 | MODE_BGRX | MODE_BGRA | MODE_BGRA16) & pSrcImages[0]->mode))
+	if (((MODE_L | MODE_LA | MODE_L16 | MODE_LA16 | MODE_BGRX | MODE_BGRA | MODE_BGRX16 | MODE_BGRA16) & pSrcImages[0]->mode))
 	{
 		header.endianness = KTX_ENDIAN_REF;
 
-		if ((MODE_L16 | MODE_LA16 | MODE_BGRA16) & pSrcImages[0]->mode)
+		if ((MODE_L16 | MODE_LA16 | MODE_BGRX16 | MODE_BGRA16) & pSrcImages[0]->mode)
 			header.glType = KTX_UNSIGNED_SHORT; //  For compressed formats, type=0.
 		else
 			header.glType = KTX_UNSIGNED_BYTE; //  For compressed formats, type=0.
@@ -2457,6 +2477,7 @@ bool const __vectorcall ImagingSaveLayersToKTX(ImagingMemoryInstance const* cons
 			header.glInternalFormat = KTX_RG16;
 			break;
 		case MODE_BGRA16:
+		case MODE_BGRX16:
 			header.glFormat = header.glBaseInternalFormat = KTX__RGBA;
 			header.glInternalFormat = KTX_RGBA16;
 			break;
@@ -2655,372 +2676,22 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingCompressBGRAToBC7(Im
 	return(imgReturn);
 }
 
-namespace
-{
-	/// Scale a value by mip level, but do not reduce to zero.
-	inline uint32_t const mipScale(uint32_t const value, uint32_t const mipLevel) {
-		return std::max(value >> mipLevel, (uint32_t)1);
-	}
-	/// KTX files use OpenGL format values. This converts some common ones to Vulkan equivalents.
-	static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
-	inline eIMAGINGMODE const GLtoImagingMode(uint32_t const glFormat) {
-		switch (glFormat) {
-		case 0x8229: return MODE_L; // GL_R8
-		case 0x1903: return MODE_L;
-		case 0x8FBD: return MODE_L;
-
-		case 0x822B: return MODE_LA; // GL_RG8
-		case 0x8227: return MODE_LA;
-		case 0x8FBE: return MODE_LA;
-
-		case 0x822A: return MODE_L16;   // GL_R16
-		case 0x8F98: return MODE_L16;   // GL_R16_SNORM
-
-		case 0x822C: return MODE_LA16;  // GL_RG16
-		case 0x8F99: return MODE_LA16;  // GL_RG16_SNORM
-
-		case 0x80E0: return MODE_RGB; // GL_BGR
-		case 0x8051: return MODE_RGB; // GL_RGB
-		case 0x1907: return MODE_RGB; // GL_RGB
-		case 0x8C41: return MODE_RGB; // VK_FORMAT_B8G8R8_SRGB
-
-		case 0x80E1: return MODE_BGRA; // GL_BGRA
-		case 0x8058: return MODE_BGRA; // GL_RGBA
-		case 0x1908: return MODE_BGRA; // GL_RGBA
-		case 0x8C43: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB
-
-		case 0x8054: return MODE_RGB16; // GL_RGB16
-		case 0x8F9A: return MODE_RGB16; // GL_RGB16_SNORM
-
-		case 0x805B: return MODE_BGRA16; // GL_RGBA16
-		case 0x8F9B: return MODE_BGRA16; // GL_RGBA16_SNORM									
-
-		/*
-		case 0x83F0: return MODE_ERROR; // GL_COMPRESSED_RGB_S3TC_DXT1_EXT
-		case 0x83F1: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
-		case 0x83F2: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT3_EXT
-		case 0x83F3: return MODE_ERROR; // GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
-		case 0x8E8C: return MODE_ERROR;	// GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
-		case 0x8E8D: return MODE_ERROR;
-		*/
-
-		}
-		return MODE_ERROR;
-	}
-	inline eIMAGINGMODE const VKtoImagingMode(uint32_t const vkFormat) {
-		switch (vkFormat) {
-		case 9: return MODE_L; // VK_FORMAT_R8_UNORM 
-
-		case 16: return MODE_LA; // VK_FORMAT_R8G8_UNORM 
-
-		case 70: return MODE_L16;   // VK_FORMAT_R16_UNORM 
-
-		case 77: return MODE_LA16;  // VK_FORMAT_R16G16_UNORM 
-
-		case 23: return MODE_RGB; // VK_FORMAT_R8G8B8_UNORM 
-		case 29: return MODE_RGB; // VK_FORMAT_R8G8B8_SRGB 
-		case 30: return MODE_RGB; // VK_FORMAT_B8G8R8_UNORM 
-		case 36: return MODE_RGB; // VK_FORMAT_B8G8R8_SRGB 
-
-		case 37: return MODE_BGRA; // VK_FORMAT_R8G8B8A8_UNORM 
-		case 43: return MODE_BGRA; // VK_FORMAT_R8G8B8A8_SRGB 
-		case 44: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_UNORM 
-		case 50: return MODE_BGRA; // VK_FORMAT_B8G8R8A8_SRGB 
-
-		case 84: return MODE_RGB16; // VK_FORMAT_R16G16B16_UNORM 
-		case 85: return MODE_RGB16; // VK_FORMAT_R16G16B16_SNORM 
-
-		case 91: return MODE_BGRA16; // VK_FORMAT_R16G16B16A16_UNORM 
-		case 92: return MODE_BGRA16; // VK_FORMAT_R16G16B16A16_SNORM 
-
-		}
-		return MODE_ERROR;
-	}
-
-	enum KTX_VERSION
-	{
-		KTX1 = 1,
-		KTX2 = 2
-	};
-
-	/// Layout of a KTX or KTX2 file in a buffer. - Unsupported KTX2 "super compression", always just the data in it's original format
-	template<uint32_t const version = KTX1>  // KTX "1"  or  KTX "2"
-	class KTXFileLayout {
-
-	public:
-		KTXFileLayout(uint8_t const* const __restrict begin, uint8_t const* const __restrict end)
-		{
-			uint8_t const* p = begin;
-
-			if constexpr (KTX_VERSION::KTX1 == version) {
-
-				if (p + sizeof(Header) > end) return;
-
-				header_data.v1 = *(Header*)p;
-
-				static constexpr uint8_t magic[] = {
-				  0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A // KTX1
-				};
-
-				if (memcmp(magic, header_data.v1.identifier, sizeof(magic))) {
-					return;
-				}
-
-				static constexpr uint32_t const KTX_ENDIAN_REF(0x04030201);
-				if (KTX_ENDIAN_REF != header_data.v1.endianness) {
-					swap(header_data.v1.glType);
-					swap(header_data.v1.glTypeSize);
-					swap(header_data.v1.glFormat);
-					swap(header_data.v1.glInternalFormat);
-					swap(header_data.v1.glBaseInternalFormat);
-					swap(header_data.v1.pixelWidth);
-					swap(header_data.v1.pixelHeight);
-					swap(header_data.v1.pixelDepth);
-					swap(header_data.v1.numberOfArrayElements);
-					swap(header_data.v1.numberOfFaces);
-					swap(header_data.v1.numberOfMipmapLevels);
-					swap(header_data.v1.bytesOfKeyValueData);
-				}
-
-				header_data.v1.numberOfArrayElements = std::max(1U, header_data.v1.numberOfArrayElements);
-				header_data.v1.numberOfFaces = std::max(1U, header_data.v1.numberOfFaces);
-				header_data.v1.numberOfMipmapLevels = std::max(1U, header_data.v1.numberOfMipmapLevels);
-				header_data.v1.pixelDepth = std::max(1U, header_data.v1.pixelDepth);
-
-				format_ = GLtoImagingMode(header_data.v1.glInternalFormat);
-				if (format_ == MODE_ERROR) return;
-
-				p += sizeof(Header);
-				if (p + header_data.v1.bytesOfKeyValueData > end) return;
-				p += header_data.v1.bytesOfKeyValueData;
-
-				for (uint32_t mipLevel = 0; mipLevel != header_data.v1.numberOfMipmapLevels; ++mipLevel) {
-
-					// bugfix for arraylayers and faces not being factored into final size for this mip
-					uint32_t layerImageSize;
-					if (header_data.v1.numberOfArrayElements > 1) { // avoid div by zero
-						layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
-					}
-					else if (header_data.v1.numberOfFaces > 1) {
-						header_data.v1.numberOfArrayElements = header_data.v1.numberOfFaces; header_data.v1.numberOfFaces = 1;
-						layerImageSize = *(uint32_t*)(p) / header_data.v1.numberOfArrayElements;
-					}
-					else {
-						layerImageSize = *(uint32_t*)(p);
-					}
-
-					layerImageSize = (layerImageSize + 3) & ~3;
-					if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(layerImageSize);
-
-					layerImageSizes_.push_back(layerImageSize);
-
-					uint32_t imageSize = layerImageSize * header_data.v1.numberOfFaces * header_data.v1.numberOfArrayElements;
-
-					imageSize = (imageSize + 3) & ~3;
-					if (KTX_ENDIAN_REF != header_data.v1.endianness) swap(imageSize);
-
-					imageSizes_.push_back(imageSize);
-
-					p += 4; // offset for reading layer imagesize above
-					imageOffsets_.push_back((uint32_t)(p - begin));
-
-					if (p + imageSize > end) {
-						// see https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glPixelStore.xhtml
-						// fix bugs... https://github.com/dariomanesku/cmft/issues/29
-						header_data.v1.numberOfMipmapLevels = mipLevel + 1;
-						break;
-					}
-					p += imageSize; // next mip offset if there is one
-				}
-			}
-			else { // KTX2
-
-				if (p + sizeof(HeaderV2) > end) return;
-
-				header_data.v2 = *(HeaderV2*)p;
-
-				static constexpr uint8_t magic[] = {
-				  0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A  // KTX2
-				};
-
-				if (memcmp(magic, header_data.v2.identifier, sizeof(magic))) {
-					return;
-				}
-
-				header_data.v2.numberOfArrayElements = std::max(1U, header_data.v2.numberOfArrayElements);
-				header_data.v2.numberOfFaces = std::max(1U, header_data.v2.numberOfFaces);
-				header_data.v2.numberOfMipmapLevels = std::max(1U, header_data.v2.numberOfMipmapLevels);
-				header_data.v2.pixelDepth = std::max(1U, header_data.v2.pixelDepth);
-
-				format_ = VKtoImagingMode(header_data.v2.format);
-				if (format_ == MODE_ERROR) return;
-
-				p += sizeof(HeaderV2);
-
-				uint32_t imageOffset((uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength)); // ktx2 image data start offset
-
-				for (uint32_t mipLevel = 0; mipLevel != header_data.v2.numberOfMipmapLevels; ++mipLevel) {
-
-					p += 16; // skip byte offset & length, now on mip image image size
-
-					// bugfix for arraylayers and faces not being factored into final size for this mip
-					uint32_t layerImageSize;
-					if (header_data.v2.numberOfArrayElements > 1) { // avoid div by zero
-						layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
-					}
-					else if (header_data.v2.numberOfFaces > 1) {
-						header_data.v2.numberOfArrayElements = header_data.v2.numberOfFaces; header_data.v2.numberOfFaces = 1;
-						layerImageSize = *(uint32_t*)(p) / header_data.v2.numberOfArrayElements;
-					}
-					else {
-						layerImageSize = *(uint32_t*)(p);
-					}
-
-					layerImageSize = (layerImageSize + 3) & ~3;
-					layerImageSizes_.push_back(layerImageSize);
-
-					uint32_t imageSize = layerImageSize * header_data.v2.numberOfFaces * header_data.v2.numberOfArrayElements;
-
-					imageSize = (imageSize + 3) & ~3;
-					imageSizes_.push_back(imageSize);
-
-					p += 8; // offset for reading layer imagesize above
-					imageOffsets_.push_back(imageOffset); // relative to start of image data in ktx v2
-					imageOffset += imageSize;
-				}
-			}
-			ok_ = true;
-		}
-
-		uint32_t const offset(uint32_t const mipLevel, uint32_t const arrayLayer, uint32_t const face) const {
-
-			if constexpr (KTX_VERSION::KTX2 == version) {
-				return imageOffsets_[mipLevel] + (arrayLayer * header_data.v2.numberOfFaces + face) * layerImageSizes_[mipLevel];
-			}
-
-			return imageOffsets_[mipLevel] + (arrayLayer * header_data.v1.numberOfFaces + face) * layerImageSizes_[mipLevel];
-		}
-
-		uint32_t const size(uint32_t const mipLevel) {
-			return imageSizes_[mipLevel];
-		}
-
-		bool const ok() const { return ok_; }
-		eIMAGINGMODE const format() const { return format_; }
-		uint32_t const mipLevels() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfMipmapLevels; return header_data.v1.numberOfMipmapLevels; }
-		uint32_t const arrayLayers() const { if constexpr (KTX_VERSION::KTX2 == version) return header_data.v2.numberOfArrayElements; return header_data.v1.numberOfArrayElements; }
-		uint32_t const width(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelWidth, mipLevel); return mipScale(header_data.v1.pixelWidth, mipLevel); }
-		uint32_t const height(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelHeight, mipLevel); return mipScale(header_data.v1.pixelHeight, mipLevel); }
-		uint32_t const depth(uint32_t const mipLevel) const { if constexpr (KTX_VERSION::KTX2 == version) return mipScale(header_data.v2.pixelDepth, mipLevel); return mipScale(header_data.v1.pixelDepth, mipLevel); }
-
-		ImagingMemoryInstance* const __restrict upload(uint8_t const* const __restrict pFileBegin) const {
-
-			switch (format()) // only these image formats are supported natively for ktx
-			{
-			case MODE_BGRA16:
-				return(ImagingLoadFromMemoryBGRA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			case MODE_RGB16: // promote to BGRX16, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
-			{
-				Imaging image(ImagingLoadFromMemoryRGB16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-				Imaging const promoted_image(ImagingRGB16ToBGRX16(image));
-				ImagingDelete(image); image = nullptr;
-				return(promoted_image);
-			}
-			case MODE_BGRA:
-				return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			case MODE_RGB: // promote to BGRX, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
-			{
-				Imaging image(ImagingLoadFromMemoryRGB(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-				Imaging const promoted_image(ImagingRGBToBGRX(image));
-				ImagingDelete(image); image = nullptr;
-				return(promoted_image);
-			}
-			case MODE_LA16:
-				return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			case MODE_LA:
-				return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			case MODE_L16:
-				return(ImagingLoadFromMemoryL16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			case MODE_L:
-				return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(0), height(0)));
-			default:
-				break;
-			}
-
-			return(nullptr);
-		}
-	private:
-		static void swap(uint32_t& value) {
-			value = value >> 24 | (value & 0xff0000) >> 8 | (value & 0xff00) << 8 | value << 24;
-		}
-
-		struct Header {
-			uint8_t identifier[12];
-			uint32_t endianness;
-			uint32_t glType;
-			uint32_t glTypeSize;
-			uint32_t glFormat;
-			uint32_t glInternalFormat;
-			uint32_t glBaseInternalFormat;
-			uint32_t pixelWidth;
-			uint32_t pixelHeight;
-			uint32_t pixelDepth;
-			uint32_t numberOfArrayElements;
-			uint32_t numberOfFaces;
-			uint32_t numberOfMipmapLevels;
-			uint32_t bytesOfKeyValueData;
-		};
-
-		struct HeaderV2 {
-			uint8_t identifier[12];
-			uint32_t format;
-			uint32_t typeSize;
-			uint32_t pixelWidth;
-			uint32_t pixelHeight;
-			uint32_t pixelDepth;
-			uint32_t numberOfArrayElements; // layer count / number of array elements
-			uint32_t numberOfFaces;
-			uint32_t numberOfMipmapLevels;
-			uint32_t supercompressionScheme;
-			uint32_t dfdOffset;
-			uint32_t dfdLength;
-			uint32_t kvdOffset;
-			uint32_t kvdLength;
-			uint64_t sgdOffset;
-			uint64_t sgdLength;
-		};
-
-		struct {
-			Header   v1{};
-			HeaderV2 v2{};
-		} header_data{};
-
-		eIMAGINGMODE format_;
-		bool ok_ = false;
-		std::vector<uint32_t> imageOffsets_;
-		std::vector<uint32_t> imageSizes_;
-		std::vector<uint32_t> layerImageSizes_;
-	};
-
-	
-} // end ns
-
 ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring_view const filenamepath)
 {
 	static constexpr wchar_t const* const EXTENSION_KTX1 = L".ktx";
 	static constexpr wchar_t const* const EXTENSION_KTX2 = L".ktx2";
 
-	fs::path filename(filenamepath);
+	fs::path const filename(filenamepath);
 
 	uint32_t version(0);
 
 	if (fs::exists(filename)) {
 
 		if (filename.extension() == EXTENSION_KTX1) {
-			version = 1;
+			version = KTX_VERSION::KTX1;
 		}
 		else if (filename.extension() == EXTENSION_KTX2) {
-			version = 2;
+			version = KTX_VERSION::KTX2;
 		}
 	}
 	else {
