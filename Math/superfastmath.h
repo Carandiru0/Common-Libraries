@@ -1444,6 +1444,10 @@ namespace SFM	// (s)uper (f)ast (m)ath
 
 		return(((rgba.a << 24U) | (rgba.b << 16U) | (rgba.g << 8U) | rgba.r));  // ABGR = RGBA mem order
 	}
+	STATIC_INLINE_PURE uint32_t const __vectorcall pack_rgb_hdr(uvec4_t const& __restrict rgb) {  // A - ignored, R - 10 bits, G - 10 bits, B - 10 bits
+
+		return(((rgb.b << 20U) | (rgb.g << 10U) | rgb.r));  // BGR = RGB mem order
+	}
 	STATIC_INLINE_PURE void __vectorcall unpack_rgba(uint32_t const packed, uint32_t& __restrict r, uint32_t& __restrict g, uint32_t& __restrict b, uint32_t& __restrict a) {
 
 		r = (packed & 0xFFU);
@@ -1457,6 +1461,13 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		rgba.g = ((packed >> 8U) & 0xFFU);
 		rgba.b = ((packed >> 16U) & 0xFFU);
 		rgba.a = ((packed >> 24U) & 0xFFU);
+	}
+	STATIC_INLINE_PURE void __vectorcall unpack_rgb_hdr(uint32_t const packed, uvec4_t& __restrict rgb) { // A - ignored, R - 10 bits, G - 10 bits, B - 10 bits
+
+		rgb.r = (packed & 0x3FFU);
+		rgb.g = ((packed >> 10U) & 0x3FFU);
+		rgb.b = ((packed >> 20U) & 0x3FFU);
+		rgb.a = 0; // ignored on unpacked/packed hdr color
 	}
 	STATIC_INLINE_PURE bool const __vectorcall rgb_le(uvec4_v const packed, uint32_t const lower_bound) { // returns true if all rgb components are less than or equal to lower_bound
 											 //all
@@ -1509,19 +1520,21 @@ namespace SFM	// (s)uper (f)ast (m)ath
 	}
 #define SRGB_to_FLOAT SFM::XMColorSRGBToRGB
 
-	STATIC_INLINE_PURE uint32_t const srgb_to_linear_rgba(uint32_t const packed) // there is a faster function that uses a lookup table in Imaging.
+	// never store linear color to uint8_t from a srgb->linear conversion, more precision required - https ://blog.demofox.org/2018/03/10/dont-convert-srgb-u8-to-linear-u8/
+	STATIC_INLINE_PURE uint32_t const srgb_to_linear_rgb_hdr(uint32_t const packed) // input 8bit SRGB, output 10bit LINEAR                                                     *there is a faster function that uses a 10bit lookup table in Imaging*
 	{
 		uvec4_t rgba;
 		SFM::unpack_rgba(packed, rgba);
 
-		static constexpr float const NORMALIZE = 1.0f / float(UINT8_MAX);
-		static constexpr float const DENORMALIZE = float(UINT8_MAX);
+		static constexpr float const NORMALIZE_8BIT = 1.0f / float(UINT8_MAX);
+		static constexpr float const DENORMALIZE_10BIT = float((1 << 10) - 1); // 0 ... 1023
 
-		XMVECTOR xmColor = XMVectorMultiply(_mm_set1_ps(NORMALIZE), uvec4_v(rgba).v4f());
+		XMVECTOR xmColor = XMVectorMultiply(_mm_set1_ps(NORMALIZE_8BIT), uvec4_v(rgba).v4f());
 		xmColor = SFM::XMColorSRGBToRGB(xmColor);
-		SFM::saturate_to_u8(XMVectorMultiply(_mm_set1_ps(DENORMALIZE), xmColor), rgba);
 
-		return( SFM::pack_rgba(rgba) );
+		SFM::saturate_to_u16(XMVectorMultiply(_mm_set1_ps(DENORMALIZE_10BIT), xmColor), rgba);
+
+		return( SFM::pack_rgb_hdr(rgba) );
 	}
 
 	//------------------------------------------------------------------------------

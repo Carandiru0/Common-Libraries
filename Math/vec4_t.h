@@ -124,7 +124,7 @@ public:
 		return(_mm_cmpeq_epi32(v, rhs.v));
 	}
 	__inline __m128i const __vectorcall operator!=(vec4_v const& __restrict rhs) const {
-		// there is no "neq" intrinsic, workaround by complementing the "eq" intrinsic result - overhead of extra intrinsics is neglible, _mm_and_not_si128 is very fast.
+		// there is no "neq" intrinsic, workaround by complementing the "eq" intrinsic result - overhead of extra intrinsics is neglible, _mm_andnot_si128 is very fast.
 		return(_mm_andnot_si128(_mm_cmpeq_epi32(v, rhs.v), _mm_set1_epi32(0xFFFFFFFF)));   // !(a == b) & 1
 	}
 	__inline __m128i const __vectorcall operator>(vec4_v const& __restrict rhs) const {
@@ -142,6 +142,10 @@ public:
 	//##############################
 
 	// ctors //
+	constexpr vec4_v() // allow constinit usage
+		: v{}
+	{}
+
 	__forceinline explicit __vectorcall vec4_v(__m128i const v_) // loads the intrinsic register (__m128i) directly
 		: v(v_)
 	{}
@@ -162,7 +166,7 @@ public:
 		: v(_mm_setr_epi32(val012, val012, val012, val3))
 	{}
 	
-	__forceinline explicit __vectorcall vec4_v(T const replicated_to_all_components = T(0))
+	__forceinline explicit __vectorcall vec4_v(T const replicated_to_all_components)
 		: v(_mm_set1_epi32(replicated_to_all_components))
 	{}
 

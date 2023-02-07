@@ -154,8 +154,8 @@ typedef struct ImagingHistogram // Histogram for ImagingMemoryInstance
 
 
 // color operations //
-uvec4_v const  ImagingSRGBtoLinearVector(uint32_t const packed_srgb);
-uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);
+uvec4_v const  ImagingSRGBtoLinearVector(uint32_t const packed_srgb); // input 8bit SRGB, output 10bit LINEAR
+uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb);       // "" ""  ""   ""   ""  ""   ""  ""  ""
 
 
 // OPERATIONS //

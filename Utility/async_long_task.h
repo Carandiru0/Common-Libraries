@@ -11,6 +11,13 @@
 
 #endif
 
+#ifdef TRACY_ENABLE
+
+#include <tracy.h>
+#include <fmt/fmt.h>
+
+#endif
+
 enum thread_id_t {
 	background_critical = 0,
 	background = 1,
@@ -432,6 +439,9 @@ inline void async_long_task::process_work()
 template<thread_id_t const thread>
 void async_long_task::background_task()
 {
+#ifdef TRACY_ENABLE
+	ZoneScoped;
+#endif
 	process_work<thread>();
 
 	// always revert to idle priority
@@ -449,10 +459,15 @@ void __cdecl async_long_task::background_thread(void*)
 {
 	local_init_tbb_floating_point_env();
 
+#ifdef TRACY_ENABLE
+	__SetThreadName( fmt::format("async {:s} thread", ((0 == thread) ? "background critical" : "background")).c_str() );
+#endif
+
 	[[likely]] while (_alive[thread].test_and_set()) // if returns false, means flag was cleared - signaling its time to exit thread
 	{
 		// wait until work is queued
 		WaitForSingleObject(_hQueued[thread], INFINITE); // *bugfix: better than an APC and SleepEx w/alertable state. Less latency, simpler.
+		
 		// do the work //
 		background_task<thread>();
 	}
