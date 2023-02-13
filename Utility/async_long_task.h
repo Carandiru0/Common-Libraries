@@ -164,7 +164,6 @@ public:
 											}
 										}
 										else {
-											_mm_pause();
 											--nested_try_count;
 										}
 									}
@@ -182,7 +181,6 @@ public:
 							}
 						}
 						else {
-							_mm_pause();
 							--try_count;
 						}
 					}
@@ -199,7 +197,6 @@ public:
 							}
 						}
 						else {
-							_mm_pause();
 							--try_count;
 						}
 					}
@@ -229,7 +226,6 @@ public:
 							wake_up(thread);
 							bAlerted = true;
 						}
-						_mm_pause();
 					}
 #if !defined(NDEBUG) && VERBOSE_LOGGING_ASYNC_LONG_TASK
 					FMT_LOG_WARN(INFO_LOG, "{:s} {:s} task <{:d}> found [deep]",
@@ -250,7 +246,6 @@ public:
 				
 				// bugfix - must wakeup when idle for extended periods of time, and if program is not foreground task could have silently completed
 				wake_up(thread);
-				_mm_pause();
 			}
 
 		}
@@ -520,7 +515,6 @@ bool const async_long_task::wait_for_all(milliseconds const timeout)
 
 	while( (bWaitState = !(_items[background_critical].empty() & _items[background].empty())) )
 	{
-		_mm_pause(); // hint to processor
 		SleepEx(beats::yield, FALSE); // lower cpu usage, yield to another thread
 
 		[[unlikely]] if (critical_now() - tStart >= duration_cast<nanoseconds>(timeout)) {
@@ -558,7 +552,6 @@ async_long_task::~async_long_task()
 		
 		while (_alive[current_thread].test_and_set()) {
 
-			_mm_pause(); // hint to processor
 			SleepEx(beats::yield, FALSE); // lower cpu usage, yield to another thread
 		}
 

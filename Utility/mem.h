@@ -68,14 +68,15 @@ INLINE_MEMFUNC ___streaming_store_fence() { _mm_sfence(); }
 
 // [very large copies]
 template<size_t const alignment>
-INLINE_MEMFUNC ___memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE)); // defaults to 4KB block/thread, customize based on total size *must be power of 2*
-																																									 // for best results, data should be aligned (minimum 16)
-																																									 // best alignment is CACHE_LINE_BYTES (64) to mitigate false sharing!
-																																									 // 
+INLINE_MEMFUNC ___memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE));        // defaults to 4KB block/thread, customize based on total size *must be power of 2*
+template<size_t const alignment>                                                                                                                                            // for best results, data should be aligned (minimum 16)
+INLINE_MEMFUNC ___memcpy_threaded_stream(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE)); // best alignment is CACHE_LINE_BYTES (64) to mitigate false sharing!
+																																									 
 // [very large clears]
 template<size_t const alignment>
 INLINE_MEMFUNC ___memset_threaded(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE));
-
+template<size_t const alignment>
+INLINE_MEMFUNC ___memset_threaded_stream(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size = (MINIMUM_PAGE_SIZE));
 
 // [virtual memory]
 // for prefetching a memory into virtual memory, ensuring it is not paged from disk multiple times if said memory is accessed for example a memory mapped file
@@ -362,7 +363,7 @@ namespace internal_mem
 
 // [implementation (public) functionality begins]
 
-// [very large copies]
+// [very large copies] *for all other uses besides write combined memory*
 template<size_t const alignment>
 INLINE_MEMFUNC ___memcpy_threaded(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size)
 {
@@ -371,14 +372,30 @@ INLINE_MEMFUNC ___memcpy_threaded(void* const __restrict dest, void const* const
 		[&](tbb::blocked_range<__m256i const* __restrict> block) {
 
 			ptrdiff_t const offset(((uint8_t const* const __restrict)block.begin()) - ((uint8_t const* const __restrict)src));
-			ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
+	        ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
 
-			internal_mem::memcpy_stream<alignment>((((uint8_t* const __restrict)dest) + offset), (uint8_t const* const __restrict)block.begin(), (size_t const)current_block_size);
+	        memcpy((((uint8_t* const __restrict)dest) + offset), (uint8_t const* const __restrict)block.begin(), (size_t const)current_block_size); // intrinsic
 		}
 	);
 }
 
-// [very large clears]
+// [very large copies] *to write combined memory*
+template<size_t const alignment>
+INLINE_MEMFUNC ___memcpy_threaded_stream(void* const __restrict dest, void const* const __restrict src, size_t const bytes, size_t const block_size)
+{
+	tbb::parallel_for(
+		tbb::blocked_range<__m256i const* __restrict>((__m256i* const __restrict)src, (__m256i* const __restrict)(((uint8_t const* const __restrict)src) + bytes), SFM::roundToMultipleOf<false>((int64_t)block_size, CACHE_LINE_BYTES)), // rounding down blocksize to prevent overlapping cachelines (false sharing)
+		[&](tbb::blocked_range<__m256i const* __restrict> block) {
+
+			ptrdiff_t const offset(((uint8_t const* const __restrict)block.begin()) - ((uint8_t const* const __restrict)src));
+			ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
+
+			internal_mem::memcpy_stream<alignment>((((uint8_t* const __restrict)dest) + offset), (uint8_t const* const __restrict)block.begin(), (size_t const)current_block_size); // streaming custom memcpy achieves upto 16x improvement when used with write combined memory destination
+		}
+	);
+}
+
+// [very large clears] *for all other uses besides write combined memory*
 template<size_t const alignment>
 INLINE_MEMFUNC ___memset_threaded(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size)
 {
@@ -389,7 +406,23 @@ INLINE_MEMFUNC ___memset_threaded(void* const __restrict dest, int const value, 
 			ptrdiff_t const offset(((uint8_t const* const __restrict)block.begin()) - ((uint8_t const* const __restrict)dest));
 			ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
 
-			internal_mem::memset_stream<alignment>((((uint8_t* const __restrict)dest) + offset), _mm256_set1_epi32(value), (size_t const)current_block_size);
+			memset((((uint8_t* const __restrict)dest) + offset), value, (size_t const)current_block_size); // intrinsic
+		}
+	);
+}
+
+// [very large clears] *to write combined memory*
+template<size_t const alignment>
+INLINE_MEMFUNC ___memset_threaded_stream(void* const __restrict dest, int const value, size_t const bytes, size_t const block_size)
+{
+	tbb::parallel_for(
+		tbb::blocked_range<__m256i const* __restrict>((__m256i* const __restrict)dest, (__m256i* const __restrict)(((uint8_t const* const __restrict)dest) + bytes), SFM::roundToMultipleOf<false>((int64_t)block_size, CACHE_LINE_BYTES)), // rounding down blocksize to prevent overlapping cachelines (false sharing)
+		[&](tbb::blocked_range<__m256i const* __restrict> block) {
+
+			ptrdiff_t const offset(((uint8_t const* const __restrict)block.begin()) - ((uint8_t const* const __restrict)dest));
+	        ptrdiff_t const current_block_size(((uint8_t const* const __restrict)block.end()) - ((uint8_t const* const __restrict)block.begin())); // required since last block can be partial 
+
+	        internal_mem::memset_stream<alignment>((((uint8_t* const __restrict)dest) + offset), _mm256_set1_epi32(value), (size_t const)current_block_size); // streaming custom memset achieves upto 16x improvement when used with write combined memory destination
 		}
 	);
 }
