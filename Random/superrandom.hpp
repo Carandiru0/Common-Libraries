@@ -424,7 +424,7 @@ XMVECTOR const __vectorcall PsuedoRandomVector(/* Range is 0.0f to 1.0f*/)
 
 		XMFLOAT4 const v;
 
-	} const randoms;
+	} const randoms{};
 
 	return(XMVectorSubtract(XMLoadFloat4(&randoms.v), XMVectorReplicate(1.0f)));
 }

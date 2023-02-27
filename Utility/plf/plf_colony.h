@@ -1426,20 +1426,20 @@ namespace plf
 		{
 			begin_iterator.group_pointer = PLF_COLONY_ALLOCATE(group_allocator_type, group_allocator_pair, 1, 0);
 
-			try
-			{
+			//try
+			//{
 #ifdef PLF_COLONY_VARIADICS_SUPPORT
 				PLF_COLONY_CONSTRUCT(group_allocator_type, group_allocator_pair, begin_iterator.group_pointer, first_group_size);
 #else
 				PLF_COLONY_CONSTRUCT(group_allocator_type, group_allocator_pair, begin_iterator.group_pointer, group(first_group_size));
 #endif
-			}
-			catch (...)
-			{
-				PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, begin_iterator.group_pointer, 1);
-				begin_iterator.group_pointer = NULL;
-				throw;
-			}
+			//}
+			//catch (...)
+			//{
+			//	PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, begin_iterator.group_pointer, 1);
+			//	begin_iterator.group_pointer = NULL;
+			//	throw;
+			//}
 
 			end_iterator.group_pointer = begin_iterator.group_pointer;
 			end_iterator.element_pointer = begin_iterator.element_pointer = begin_iterator.group_pointer->elements;
@@ -1786,16 +1786,16 @@ namespace plf
 					group& next_group = *(end_iterator.group_pointer->next_group);
 					const skipfield_type new_group_size = (total_number_of_elements < static_cast<size_type>(group_allocator_pair.max_elements_per_group)) ? static_cast<skipfield_type>(total_number_of_elements) : group_allocator_pair.max_elements_per_group;
 
-					try
-					{
+					//try
+					//{
 						PLF_COLONY_CONSTRUCT(group_allocator_type, group_allocator_pair, &next_group, new_group_size, end_iterator.group_pointer);
-					}
-					catch (...)
-					{
-						PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, &next_group, 1);
-						end_iterator.group_pointer->next_group = NULL;
-						throw;
-					}
+					//}
+					//catch (...)
+					//{
+					//	PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, &next_group, 1);
+					//	end_iterator.group_pointer->next_group = NULL;
+					//	throw;
+					//}
 
 #ifdef PLF_COLONY_TYPE_TRAITS_SUPPORT
 					if PLF_COLONY_CONSTEXPR(std::is_nothrow_constructible<element_type, arguments ...>::value)
@@ -1805,17 +1805,17 @@ namespace plf
 					else
 #endif
 					{
-						try
-						{
+						//try
+						//{
 							PLF_COLONY_CONSTRUCT(element_allocator_type, (*this), reinterpret_cast<pointer>(next_group.elements), std::forward<arguments>(parameters)...);
-						}
-						catch (...)
-						{
-							PLF_COLONY_DESTROY(group_allocator_type, group_allocator_pair, &next_group);
-							PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, &next_group, 1);
-							end_iterator.group_pointer->next_group = NULL;
-							throw;
-						}
+						//}
+						//catch (...)
+						//{
+						//	PLF_COLONY_DESTROY(group_allocator_type, group_allocator_pair, &next_group);
+						//	PLF_COLONY_DEALLOCATE(group_allocator_type, group_allocator_pair, &next_group, 1);
+						//	end_iterator.group_pointer->next_group = NULL;
+						//	throw;
+						//}
 					}
 
 					end_iterator.group_pointer = &next_group;
@@ -1851,15 +1851,15 @@ namespace plf
 				else
 #endif
 				{
-					try
-					{
+					//try
+					//{
 						PLF_COLONY_CONSTRUCT(element_allocator_type, (*this), reinterpret_cast<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
-					}
-					catch (...)
-					{
-						clear();
-						throw;
-					}
+					//}
+					//catch (...)
+					//{
+					//	clear();
+					//	throw;
+					//}
 				}
 
 				++end_iterator.skipfield_pointer;

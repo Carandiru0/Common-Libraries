@@ -92,8 +92,8 @@ namespace internal_mem
 	{
 		static constexpr size_t const element_size = sizeof(__m256i);
 
-		{ // 256 bytes / iteration
-			static constexpr size_t const chunk_size(element_size << 3);
+		{ // 128 bytes / iteration
+			static constexpr size_t const chunk_size(element_size << 2);
 #pragma loop( ivdep )
 			for (; bytes >= chunk_size; bytes -= chunk_size) {
 
@@ -101,12 +101,8 @@ namespace internal_mem
 
 				_mm256_stream_si256((__m256i * __restrict)d, xmValue);
 				_mm256_stream_si256(((__m256i * __restrict)d) + 1, xmValue);
-				_mm256_stream_si256(((__m256i * __restrict)d) + 2, xmValue);
-				_mm256_stream_si256(((__m256i * __restrict)d) + 3, xmValue);
-				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 4), _mm256_castsi256_ps(xmValue));
-				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 5), _mm256_castsi256_ps(xmValue));
-				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 6), _mm256_castsi256_ps(xmValue));
-				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 7), _mm256_castsi256_ps(xmValue));
+				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 2), _mm256_castsi256_ps(xmValue));
+				_mm256_stream_ps((float* const __restrict)(((__m256 * __restrict)d) + 3), _mm256_castsi256_ps(xmValue));
 
 				d += chunk_size;
 			}
@@ -154,21 +150,17 @@ namespace internal_mem
 	{
 		static constexpr size_t const element_size = sizeof(__m256i);
 
-		{ // 256 bytes / iteration
-			static constexpr size_t const chunk_size(element_size << 3);
+		{ // 128 bytes / iteration
+			static constexpr size_t const chunk_size(element_size << 2);
 #pragma loop( ivdep )
 			for (; bytes >= chunk_size; bytes -= chunk_size) {
 
 				__m256i const
 					r0(_mm256_stream_load_si256((__m256i * __restrict)s)),
-					r1(_mm256_stream_load_si256(((__m256i * __restrict)s) + 1)),
-					r2(_mm256_stream_load_si256(((__m256i * __restrict)s) + 2)),
-					r3(_mm256_stream_load_si256(((__m256i * __restrict)s) + 3));
+					r1(_mm256_stream_load_si256(((__m256i * __restrict)s) + 1));
 				__m256 const
-					r4(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 4))),
-					r5(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 5))),
-					r6(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 6))),
-					r7(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 7)));
+					r2(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 2))),
+					r3(_mm256_castsi256_ps(_mm256_stream_load_si256(((__m256i * __restrict)s) + 3)));
 
 				_mm_prefetch((const char*)(s + chunk_size), _MM_HINT_NTA); // prefetch next
 
@@ -176,12 +168,8 @@ namespace internal_mem
 
 				_mm256_store_si256((__m256i * __restrict)d, r0);
 				_mm256_store_si256(((__m256i * __restrict)d) + 1, r1);
-				_mm256_store_si256(((__m256i * __restrict)d) + 2, r2);
-				_mm256_store_si256(((__m256i * __restrict)d) + 3, r3);
-				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 4), r4);
-				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 5), r5);
-				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 6), r6);
-				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 7), r7);
+				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 2), r2);
+				_mm256_store_ps((float* const __restrict)(((__m256 * __restrict)d) + 3), r3);
 
 				d += chunk_size;
 				s += chunk_size;
@@ -238,21 +226,17 @@ namespace internal_mem
 	{
 		static constexpr size_t const element_size = sizeof(__m256i);
 
-		{ // 256 bytes / iteration
-			static constexpr size_t const chunk_size(element_size << 3);
+		{ // 128 bytes / iteration
+			static constexpr size_t const chunk_size(element_size << 2);
 #pragma loop( ivdep )
 			for (; bytes >= chunk_size; bytes -= chunk_size) {
 
 				__m256i const
 					r0(_mm256_load_si256((__m256i * __restrict)s)),
-					r1(_mm256_load_si256(((__m256i * __restrict)s) + 1)),
-					r2(_mm256_load_si256(((__m256i * __restrict)s) + 2)),
-					r3(_mm256_load_si256(((__m256i * __restrict)s) + 3));
+					r1(_mm256_load_si256(((__m256i * __restrict)s) + 1));
 				__m256 const
-					r4(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 4))),
-					r5(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 5))),
-					r6(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 6))),
-					r7(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 7)));
+					r2(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 2))),
+					r3(_mm256_castsi256_ps(_mm256_load_si256(((__m256i * __restrict)s) + 3)));
 
 				_mm_prefetch((const char*)(s + chunk_size), _MM_HINT_T0); // prefetch next
 
@@ -260,12 +244,8 @@ namespace internal_mem
 
 				_mm256_stream_si256(((__m256i * __restrict)d), r0);
 				_mm256_stream_si256(((__m256i * __restrict)d) + 1, r1);
-				_mm256_stream_si256(((__m256i * __restrict)d) + 2, r2);
-				_mm256_stream_si256(((__m256i * __restrict)d) + 3, r3);
-				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 4), r4);
-				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 5), r5);
-				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 6), r6);
-				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 7), r7);
+				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 2), r2);
+				_mm256_stream_ps((float* __restrict)(((__m256 * __restrict)d) + 3), r3);
 
 				d += chunk_size;
 				s += chunk_size;

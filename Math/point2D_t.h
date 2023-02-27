@@ -146,10 +146,10 @@ STATIC_INLINE_PURE point2D_t const __vectorcall p2D_swap(point2D_t const a) {
 	return(point2D_t(a.y, a.x));
 }
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap_pow2(point2D_t const a, point2D_t const max_) { // **only works if max_ is a power of two**
-	return(point2D_t(_mm_and_epi32(a.v, p2D_subs(max_, 1).v)));
+	return(point2D_t(_mm_and_si128(a.v, p2D_subs(max_, 1).v)));
 }
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap_pow2(point2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
-	return(point2D_t(_mm_and_epi32(a.v, point2D_t(max_ - 1).v)));
+	return(point2D_t(_mm_and_si128(a.v, point2D_t(max_ - 1).v)));
 }
 STATIC_INLINE_PURE point2D_t const __vectorcall p2D_wrap(point2D_t const a, point2D_t const max_) {
 	return(point2D_t(a.x % max_.x, a.y % max_.y));
@@ -286,9 +286,15 @@ STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_clamp(rect2D_t const a, int32
 	return(rect2D_t(point2D_t(SFM::clamp(a.left_top().v, xmMin, xmMax)),
 		point2D_t(SFM::clamp(a.right_bottom().v, xmMin, xmMax))));
 }
+
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap_pow2(rect2D_t const a, point2D_t const max_) { // **only works if max_ is a power of two**
+	return(rect2D_t(_mm_and_si128(a.v, rect2D_t(max_.x - 1, max_.y - 1, max_.x - 1, max_.y - 1).v)));
+}
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap_pow2(rect2D_t const a, int32_t const max_) { // **only works if max_ is a power of two**
-	int64_t const max_min_one(max_ - 1);
-	return(rect2D_t(a.left & max_min_one, a.top & max_min_one, a.right & max_min_one, a.bottom & max_min_one));
+	return(rect2D_t(_mm_and_si128(a.v, _mm_set1_epi32(max_ - 1))));
+}
+STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap(rect2D_t const a, point2D_t const max_) {
+	return(rect2D_t(a.left % max_.x, a.top % max_.y, a.right % max_.x, a.bottom % max_.y));
 }
 STATIC_INLINE_PURE rect2D_t const __vectorcall r2D_wrap(rect2D_t const a, int32_t const max_) {
 	return(rect2D_t(a.left % max_, a.top % max_, a.right % max_, a.bottom % max_));

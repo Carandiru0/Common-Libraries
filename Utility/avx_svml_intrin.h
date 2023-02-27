@@ -188,6 +188,20 @@ _mm256_invsqrt_ps(__m256 param0)
 }
 
 __SVML_INTRIN_PROLOG __m128i __DEFAULT_SVML_FN_ATTRS128
+_mm_div_epi32(__m128i param0, __m128i param1)
+{
+    register __m128i reg0 asm("xmm0") = param0;
+    register __m128i reg1 asm("xmm1") = param1;
+    asm(
+        "call __vdecl_i32div4 \t\n"
+        : "=v" (reg0)
+        : "0" (reg0), "v" (reg1)
+        : "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%rax", "%rcx", "%rdx", "%r8", "%r9", "%r10", "%r11"
+    );
+    return reg0;
+}
+
+__SVML_INTRIN_PROLOG __m128i __DEFAULT_SVML_FN_ATTRS128
 _mm_div_epu32(__m128i param0, __m128i param1)
 {
     register __m128i reg0 asm("xmm0") = param0;

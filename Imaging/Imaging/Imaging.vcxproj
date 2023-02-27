@@ -210,7 +210,7 @@
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>/Ob3 /Gw /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-mavx2 /clang:-mfma %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Gw /clang:-Ofast /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-ffp-exception-behavior=ignore /clang:-fno-math-errno /clang:-fno-trapping-math /clang:-funsafe-math-optimizations /clang:-ftree-vectorize /clang:-mvzeroupper /clang:-mavx2 /clang:-mfma /clang:-mbmi /clang:-mbmi2 /clang:-march=native %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <ControlFlowGuard>false</ControlFlowGuard>
       <CallingConvention>Cdecl</CallingConvention>
@@ -262,7 +262,7 @@
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>/Ob3 /Gw /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-mavx2 /clang:-mfma %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Ob3 /Gw /clang:-Ofast /clang:-ffast-math /clang:-ffp-contract=fast /clang:-fdenormal-fp-math=positive-zero /clang:-ffp-exception-behavior=ignore /clang:-fno-math-errno /clang:-fno-trapping-math /clang:-funsafe-math-optimizations /clang:-ftree-vectorize /clang:-mvzeroupper /clang:-mavx2 /clang:-mfma /clang:-mbmi /clang:-mbmi2 %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <ControlFlowGuard>false</ControlFlowGuard>
       <CallingConvention>Cdecl</CallingConvention>
