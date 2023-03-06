@@ -1015,7 +1015,7 @@ uvec4_v const ImagingSRGBtoLinearVector(uint32_t const packed_srgb)
 	linear.b = srgb_to_linear_lut[srgb.b];
 	linear.a = srgb.a;
 	
-	return{ linear };   // 10bpc
+	return( linear );   // 10bpc
 }
 uint32_t const ImagingSRGBtoLinear(uint32_t const packed_srgb)
 {
