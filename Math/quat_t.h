@@ -36,46 +36,19 @@ public:
 	// pitch = rotation around x axis
 	// yaw = rotation around y axis
 	// roll = rotation around z axis
-	/*
-	XMVECTOR const __vectorcall pitch_yaw_roll(float const xPitch, float const yYaw, float const zRoll) const // for updating quaternion from pitch, yaw and roll
+	
+private:
+	// *private* optimized implementation - angles --> quaternion
+	STATIC_INLINE_PURE XMVECTOR const __vectorcall pitch_yaw_roll(float const xPitch, float const yYaw, float const zRoll)
 	{
-		// cheaper to actually calculate again - single sincos vectorizxed for all 3 angles
-
-		// XYZ + - + - (corrected order) <-----
-		// YXZ + - - + (original order)
-		// ZXY - + + -
+		// XYZ + - + - 
+		// YXZ + - - + 
+		// ZXY - + + - <-------------- using
 		// ZYX - + - +
 		// YZX + + - -
 		// XZY - - + +
+		
 
-		//                                                 *do not change* extremely sensitive to order & sign
-		constinit static const XMVECTORF32  Sign = { { { 1.0f, -1.0f, 1.0f, -1.0f } } };
-
-		//                                                 *do not change* extremely sensitive to order & sign
-		XMVECTOR const HalfAngles = XMVectorMultiply(XMVectorSet(xPitch, -yYaw, -zRoll, 0.0f), g_XMOneHalf.v);
-
-		XMVECTOR SinAngles, CosAngles;
-		SinAngles = SFM::sincos(&CosAngles, HalfAngles);
-		 
-		XMVECTOR const P0 = XMVectorPermute<XM_PERMUTE_0X, XM_PERMUTE_1X, XM_PERMUTE_1X, XM_PERMUTE_1X>(SinAngles, CosAngles);
-		XMVECTOR const Y0 = XMVectorPermute<XM_PERMUTE_1Y, XM_PERMUTE_0Y, XM_PERMUTE_1Y, XM_PERMUTE_1Y>(SinAngles, CosAngles);
-		XMVECTOR const R0 = XMVectorPermute<XM_PERMUTE_1Z, XM_PERMUTE_1Z, XM_PERMUTE_0Z, XM_PERMUTE_1Z>(SinAngles, CosAngles);
-		XMVECTOR const P1 = XMVectorPermute<XM_PERMUTE_0X, XM_PERMUTE_1X, XM_PERMUTE_1X, XM_PERMUTE_1X>(CosAngles, SinAngles);
-		XMVECTOR const Y1 = XMVectorPermute<XM_PERMUTE_1Y, XM_PERMUTE_0Y, XM_PERMUTE_1Y, XM_PERMUTE_1Y>(CosAngles, SinAngles);
-		XMVECTOR const R1 = XMVectorPermute<XM_PERMUTE_1Z, XM_PERMUTE_1Z, XM_PERMUTE_0Z, XM_PERMUTE_1Z>(CosAngles, SinAngles);
-
-		XMVECTOR Q1 = XMVectorMultiply(P1, Sign.v);
-		XMVECTOR Q0 = XMVectorMultiply(P0, Y0);
-		Q1 = XMVectorMultiply(Q1, Y1);
-		Q0 = XMVectorMultiply(Q0, R0);
-
-		// do not change  // *** corrected (order & sign) angles match engine coordinate xyz system layout
-		return(XMVectorMultiplyAdd(Q1, R1, Q0));
-	}
-	*/
-
-	XMVECTOR const __vectorcall pitch_yaw_roll(float const xPitch, float const yYaw, float const zRoll) const
-	{
 		XMVECTOR SinAngles, CosAngles;
 		SinAngles = SFM::sincos(&CosAngles, XMVectorScale(XMVectorSet(xPitch, yYaw, zRoll, 0.0f), 0.5f)); // sincos of half-angles, recalculation required.
 
@@ -94,18 +67,24 @@ public:
 		xmQy = XMQuaternionNormalize(xmQy);
 		xmQz = XMQuaternionNormalize(xmQz);
 
-		// this defines the order used - ZXY
+		// this defines the order used - ZXY                                    Z      X      Y
 		return(XMQuaternionNormalize(XMQuaternionMultiply(XMQuaternionMultiply(xmQz, xmQx), xmQy))); // ZXY
 	}
 
-	inline explicit quat_t(float const xPitch, float const yYaw, float const zRoll) // secondary
-	{
-		XMStoreFloat4A(&_quaternion, pitch_yaw_roll(xPitch, yYaw, zRoll));
-	}
-	inline explicit quat_t(v2_rotation_t const& xPitch, v2_rotation_t const& yYaw, v2_rotation_t const& zRoll) // preferred
+public:
+
+	inline explicit quat_t(v2_rotation_t const& xPitch, v2_rotation_t const& yYaw, v2_rotation_t const& zRoll)
 	{
 		XMStoreFloat4A(&_quaternion, pitch_yaw_roll(xPitch.angle(), yYaw.angle(), zRoll.angle()));
 	}
+
+	// angles are passed in (radians)
+	inline explicit quat_t(float const xPitch, float const yYaw, float const zRoll)
+	{
+		XMStoreFloat4A(&_quaternion, pitch_yaw_roll(xPitch, yYaw, zRoll));
+	}
+
+public:
 	inline bool const operator==(quat_t const& rhs) const {
 
 		return(XMVector4Equal(v4(), rhs.v4()));
