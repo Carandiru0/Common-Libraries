@@ -46,12 +46,11 @@ enum eIMAGINGMODE
 #define IMAGING_TYPE_FLOAT32 (1<<3)
 #define IMAGING_TYPE_SPECIAL (1<<4)
 
-#define IMAGING_TRANSFORM_NEAREST 0
-#define IMAGING_TRANSFORM_BOX 4
-#define IMAGING_TRANSFORM_BILINEAR 2
-#define IMAGING_TRANSFORM_HAMMING 5
+#define IMAGING_TRANSFORM_BOX 0
+#define IMAGING_TRANSFORM_BILINEAR 1
+#define IMAGING_TRANSFORM_HAMMING 2
 #define IMAGING_TRANSFORM_BICUBIC 3
-#define IMAGING_TRANSFORM_LANCZOS 1
+#define IMAGING_TRANSFORM_LANCZOS 4
 
 #define IMAGING_PIXEL_U32(im,x,y) ((im)->image32[(y)][(x)])
 #define IMAGING_PIXEL_U16(im,x,y) ((reinterpret_cast<uint16_t* const* const>((im)->image32))[(y)][(x)])
@@ -179,7 +178,7 @@ void __vectorcall ImagingDelete(ImagingHistogram* __restrict im);
 void __vectorcall ImagingDelete(ImagingHistogram const* __restrict im);
 
 // SPECIAL FUNCTIONS //
-extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter);
+extern ImagingMemoryInstance* const __restrict __vectorcall ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xsize, int const ysize, int const filter = IMAGING_TRANSFORM_BOX); // box filter (default)
 
 void __vectorcall ImagingChromaKey(ImagingMemoryInstance* const __restrict im);	// (INPLACE) key[ 0x00b140 ] r g b
 void __vectorcall ImagingDither(ImagingMemoryInstance* const __restrict im);
@@ -435,11 +434,25 @@ public:
 
 			p += sizeof(HeaderV2);
 
-			uint32_t imageOffset((uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength)); // ktx2 image data start offset
+			// ktx2 image data start offset
+			uint32_t imageOffset(0);
+			// *bugfix - (only affects .ktx2 files) apparently these chunks of data are optional, to get the correct image offset....
+			if (0 != header_data.v2.sgdOffset) { // image offset is after supercompression global data, IF PRESENT
+				imageOffset = header_data.v2.sgdOffset + header_data.v2.sgdLength;
+			}
+			else if (0 != header_data.v2.kvdOffset) { // image offset is after key value data, IF PRESENT
+				imageOffset = header_data.v2.kvdOffset + header_data.v2.kvdLength;
+			}
+			else if (0 != header_data.v2.dfdOffset) { // image offset is after data format descriptor data, IF PRESENT
+				imageOffset = header_data.v2.dfdOffset + header_data.v2.dfdLength;
+			}
+			else { // no extra data present, image data starts after header and the mipmap levels (variable size)
+				return; // ktx2 file is malformed, can't calculate start of image data without traversing the mipmap levels and the offsets & lengths it contains for each level.
+			}
 
 			for (uint32_t mipLevel = 0; mipLevel != header_data.v2.numberOfMipmapLevels; ++mipLevel) {
 
-				p += 16; // skip byte offset & length, now on mip image image size
+				p += 16; // skip byte offset & length (uint64_t's, 8 bytes each), now on mip image image size
 
 				// bugfix for arraylayers and faces not being factored into final size for this mip
 				uint32_t layerImageSize;
@@ -463,6 +476,7 @@ public:
 				imageSizes_.push_back(imageSize);
 
 				p += 8; // offset for reading layer imagesize above
+
 				imageOffsets_.push_back(imageOffset); // relative to start of image data in ktx v2
 				imageOffset += imageSize;
 			}
@@ -504,31 +518,31 @@ public:
 		switch (format()) 
 		{
 		case MODE_BGRA16:
-			return(ImagingLoadFromMemoryBGRA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryBGRA16(pFileBegin, width(0), height(0)));
 		case MODE_RGB16: // promote to BGRX16, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
 		{
-			Imaging image(ImagingLoadFromMemoryRGB16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			Imaging image(ImagingLoadFromMemoryRGB16(pFileBegin, width(0), height(0)));
 			Imaging const promoted_image(ImagingRGB16ToBGRX16(image));
 			ImagingDelete(image); image = nullptr;
 			return(promoted_image);
 		}
 		case MODE_BGRA:
-			return(ImagingLoadFromMemoryBGRA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryBGRA(pFileBegin, width(0), height(0)));
 		case MODE_RGB: // promote to BGRX, so that the returned image is consistent and the end user never has to work if it's RGB or BGRX or BGRA, it's always BGRX or BGRA when dealing with these images. BGRX and BGRA are the same, in memory usage.
 		{
-			Imaging image(ImagingLoadFromMemoryRGB(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			Imaging image(ImagingLoadFromMemoryRGB(pFileBegin, width(0), height(0)));
 			Imaging const promoted_image(ImagingRGBToBGRX(image));
 			ImagingDelete(image); image = nullptr;
 			return(promoted_image);
 		}
 		case MODE_LA16:
-			return(ImagingLoadFromMemoryLA16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryLA16(pFileBegin, width(0), height(0)));
 		case MODE_LA:
-			return(ImagingLoadFromMemoryLA(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryLA(pFileBegin, width(0), height(0)));
 		case MODE_L16:
-			return(ImagingLoadFromMemoryL16(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryL16(pFileBegin, width(0), height(0)));
 		case MODE_L:
-			return(ImagingLoadFromMemoryL(pFileBegin + offset(0, 0, 0), width(0), height(0)));
+			return(ImagingLoadFromMemoryL(pFileBegin, width(0), height(0)));
 		default:
 			break;
 		}

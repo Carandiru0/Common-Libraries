@@ -78,11 +78,11 @@ static inline double const lanczos_filter(double x)
 
 namespace { // local to this file only
 
-    constinit static inline struct filter BOX = { box_filter, 0.5 };
+    constinit static inline struct filter BOX      = { box_filter, 0.5 };
     constinit static inline struct filter BILINEAR = { bilinear_filter, 1.0 };
-    constinit static inline struct filter HAMMING = { hamming_filter, 1.0 };
-    constinit static inline struct filter BICUBIC = { bicubic_filter, 2.0 };
-    constinit static inline struct filter LANCZOS = { lanczos_filter, 3.0 };
+    constinit static inline struct filter HAMMING  = { hamming_filter, 1.0 };
+    constinit static inline struct filter BICUBIC  = { bicubic_filter, 2.0 };
+    constinit static inline struct filter LANCZOS  = { lanczos_filter, 3.0 };
 } // end ns
 
 /* 8 bits for result. Filter can have negative areas.
@@ -590,7 +590,7 @@ ImagingResample(ImagingMemoryInstance const* const __restrict imIn, int const xs
     }
 
     /* check filter */
-    switch (filter) {
+    switch (filter) {;
     case IMAGING_TRANSFORM_BOX:
         filterp = &BOX;
         break;

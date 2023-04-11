@@ -2708,13 +2708,14 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 				___prefetch_vmem(mmap.data(), mmap.size());
 
 				uint8_t const* const pReadPointer((uint8_t*)mmap.data());
-
+				
 				if (KTX_VERSION::KTX1 == version) {
 					KTXFileLayout<KTX_VERSION::KTX1> const ktxFile(pReadPointer, pReadPointer + mmap.length());
 
 					if (ktxFile.ok()) {
 
-						return(ktxFile.upload(pReadPointer));
+						uint32_t const baseOffset(ktxFile.offset(0, 0, 0));
+						return(ktxFile.upload(pReadPointer + baseOffset));
 					}
 				}
 				else {
@@ -2722,7 +2723,8 @@ ImagingMemoryInstance* const __restrict __vectorcall ImagingLoadKTX(std::wstring
 
 					if (ktx2File.ok()) {
 
-						return(ktx2File.upload(pReadPointer));
+						uint32_t const baseOffset(ktx2File.offset(0, 0, 0));
+						return(ktx2File.upload(pReadPointer + baseOffset));
 					}
 				}
 			}

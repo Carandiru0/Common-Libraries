@@ -41,3 +41,4 @@ vulkancapsviewer
 desktop.ini
 *.obsolete
 *.old
+gltf/x64/Release/gltf.lib.recipe
