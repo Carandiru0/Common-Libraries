@@ -284,6 +284,28 @@ public:
 	}
 	static bool const initialize(unsigned long const (&cores)[2], uint32_t const thread_stack_size = 0); // must be called once when appropriate at program start-up
 	static void cancel_all();
+
+	template<thread_id_t const thread>  // wait for all for specific thread
+	static inline bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX))
+	{
+		tTime const tStart(critical_now());
+
+		bool bWaitState(false);
+
+		while ((bWaitState = !_items[thread].empty()))
+		{
+			SleepEx(beats::yield, FALSE); // lower cpu usage, yield to another thread
+
+			[[unlikely]] if (critical_now() - tStart >= duration_cast<nanoseconds>(timeout)) {
+				break;
+			}
+		}
+
+
+		return(bWaitState);
+	}
+
+	// wait for all for all threads
 	static bool const wait_for_all(milliseconds const timeout = ((milliseconds)UINT32_MAX) );  // optional timeout parameter - default is infinite, 0 would simply return if a wait is needed, all other alues are milliseconds
 private:
 	template<thread_id_t const thread>
