@@ -40,6 +40,7 @@ public:
 
 	static constexpr size_t const length() { return(Length); }
 	static constexpr size_t const stride() { return(Stride); }
+	bit_function size_t const     population_count() const;
 
 	bit_function bool const   read_bit(size_t const index) const;
 	bit_function void		  set_bit(size_t const index);
@@ -53,7 +54,7 @@ public:
 	void clear();
 
 private:
-	alignas(CACHE_LINE_BYTES) bits	_bits[Stride];
+	alignas(CACHE_LINE_BYTES) bits	_bits[Stride] = {};
 public:
 	// static public methods that should be used for construction/destruction of bit_row on the heap. These provide alignment support on a cacheline to avoid some false sharing.
 	__declspec(safebuffers) static inline bit_row<Length>* const __restrict create(size_t const row_count = 1)
@@ -123,6 +124,17 @@ public:
 };
 
 template<size_t const Length>
+bit_function size_t const bit_row<Length>::population_count() const
+{
+	size_t count(0);
+	for (size_t block = 0; block < Stride; ++block) {
+
+		count += _mm_popcnt_u64(_bits[block]);
+	}
+	return(count);
+}
+
+template<size_t const Length>
 bit_function bool const bit_row<Length>::read_bit(size_t const index) const
 {
 	size_t const block(index >> element_bits);
@@ -166,7 +178,7 @@ template<size_t const Length>
 void bit_row<Length>::clear()
 {
 	if constexpr (Size > 4096) {
-		___memset_threaded<alignof(bits)>(_bits, 0, size());
+		___memset_threaded<CACHE_LINE_BYTES>(_bits, 0, size());
 	}
 	else {
 		memset(_bits, 0, size());
@@ -204,14 +216,13 @@ public:
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
 	constexpr size_t const size() const { return(stride * sizeof(bits)); }
-	void clear();
 private:
 	bit_row_reference(bit_row<Length>& __restrict a, size_t const offset = 0)
 		: _bits(a.data() + (offset >> element_bits)), _offset(offset & (element_count - 1ull)) // remainder, remeber a single bit represents a single index
 	{}
 private:
 	bits* const            _bits;
-	size_t const           _offset;
+	size_t const           _offset;  // *this is like a count, not like an index
 public:
 	// static public methods that should be used for construction
 	__declspec(safebuffers) static inline bit_row_reference<Length> create(bit_row<Length>& __restrict a, size_t const offset)

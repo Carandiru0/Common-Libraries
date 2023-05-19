@@ -152,7 +152,7 @@ template<size_t const Width, size_t const Height>
 void bit_plane<Width, Height>::clear()
 {
 	if constexpr (Size > 4096) {
-		___memset_threaded<alignof(bits)>(_bits, 0, size());
+		___memset_threaded<CACHE_LINE_BYTES>(_bits, 0, size());
 	}
 	else {
 		memset(_bits, 0, size());

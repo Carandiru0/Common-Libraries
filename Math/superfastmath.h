@@ -727,6 +727,13 @@ namespace SFM	// (s)uper (f)ast (m)ath
 		// https://www.finblackett.com/bithacks
 		return( (a > 0) - (a < 0) );
 	}
+	STATIC_INLINE_PURE int64_t const __vectorcall sgn(int64_t const a) // branchless!
+	{
+		// -1, 0, or +1
+		// Comparisons are not branching
+		// https://www.finblackett.com/bithacks
+		return((a > 0) - (a < 0));
+	}
 
 	// interpolation & easing:
 	//

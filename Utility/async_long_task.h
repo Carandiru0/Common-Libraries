@@ -331,8 +331,8 @@ private:
 	constinit static std::atomic_flag						_alive[thread_count];
 	constinit static void*									_hQueued[thread_count];
 	constinit static void*									_hThread[thread_count];
-	constinit static tbb::atomic<int32_t>					_current_priority[thread_count];
-	constinit static tbb::atomic<task_id_t>					_current_task[thread_count],
+	constinit static std::atomic<int32_t>					_current_priority[thread_count];
+	constinit static std::atomic<task_id_t>					_current_task[thread_count],
 															_last_task[thread_count][HISTORY_SZ];
 
 	static tbb::concurrent_queue< internal_only::async_work const* > _items[thread_count];
@@ -372,9 +372,9 @@ inline task_id_t const async_long_task::_enqueue(internal_only::async_work const
 
 inline tbb::concurrent_queue< internal_only::async_work const* >		async_long_task::_items[thread_count];
 constinit inline std::atomic_flag										async_long_task::_alive[thread_count]{};
-constinit inline tbb::atomic<int32_t>									async_long_task::_current_priority[thread_count]{0};
-constinit inline tbb::atomic<task_id_t>									async_long_task::_current_task[thread_count]{ 0 };
-constinit inline tbb::atomic<task_id_t>									async_long_task::_last_task[thread_count][HISTORY_SZ]{ 0 };
+constinit inline std::atomic<int32_t>									async_long_task::_current_priority[thread_count]{};
+constinit inline std::atomic<task_id_t>									async_long_task::_current_task[thread_count]{};
+constinit inline std::atomic<task_id_t>									async_long_task::_last_task[thread_count][HISTORY_SZ]{};
 constinit inline void*													async_long_task::_hThread[thread_count]{ nullptr };
 constinit inline void*													async_long_task::_hQueued[thread_count]{ nullptr };
 
