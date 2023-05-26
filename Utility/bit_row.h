@@ -16,19 +16,15 @@ or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
 #pragma intrinsic(memset)
 
+#ifndef bit_function
 #define bit_function __declspec(safebuffers) __forceinline
+#endif
 
  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  // bit_row
-template<size_t const Length>  // must be divisable by 64 //
+template<size_t const Length, typename bits = size_t>  // must be divisable by 64 and either  size_t  -or-  std::atomic_size_t //
 struct no_vtable bit_row
 {
-#ifdef BIT_ROW_ATOMIC
-	using bits = std::atomic_size_t;
-#else
-	using bits = size_t;
-#endif
-
 	static constexpr size_t const element_bits = 6;
 	static constexpr size_t const element_count = (1 << element_bits);	// block size (64 = (1 << 6))
 	static_assert((0 == Length % element_count), "bit_row length invalid");
@@ -57,26 +53,26 @@ private:
 	alignas(CACHE_LINE_BYTES) bits	_bits[Stride] = {};
 public:
 	// static public methods that should be used for construction/destruction of bit_row on the heap. These provide alignment support on a cacheline to avoid some false sharing.
-	__declspec(safebuffers) static inline bit_row<Length>* const __restrict create(size_t const row_count = 1)
+	__declspec(safebuffers) static inline bit_row<Length, bits>* const __restrict create(size_t const row_count = 1)
 	{
-		tbb::cache_aligned_allocator< bit_row<Length> > allocator;
-		bit_row<Length>* const __restrict pReturn(static_cast<bit_row<Length>*const __restrict>(allocator.allocate(row_count)));
+		tbb::cache_aligned_allocator< bit_row<Length, bits> > allocator;
+		bit_row<Length, bits>* const __restrict pReturn(static_cast<bit_row<Length, bits>*const __restrict>(allocator.allocate(row_count)));
 
 		pReturn->clear();
 
 		return(pReturn);
 	}
-	__declspec(safebuffers) static inline void destroy(bit_row<Length>* row)
+	__declspec(safebuffers) static inline void destroy(bit_row<Length, bits>* row)
 	{
 		if (row) {
 
-			tbb::cache_aligned_allocator< bit_row<Length> > allocator;
+			tbb::cache_aligned_allocator< bit_row<Length, bits> > allocator;
 			allocator.deallocate(row, 0);
 			row = nullptr;
 		}
 	}
 	// ops
-	__declspec(safebuffers) static inline bit_row<Length>& __restrict and_bits(bit_row<Length>& __restrict a, bit_row<Length> const& __restrict b)
+	__declspec(safebuffers) static inline bit_row<Length, bits>& __restrict and_bits(bit_row<Length, bits>& __restrict a, bit_row<Length, bits> const& __restrict b)
 	{
 		for (size_t bits = 0; bits < Length; bits += 256) { // by total bits (length), 256 bits / iteration
 
@@ -91,7 +87,7 @@ public:
 
 		return(a);
 	}
-	__declspec(safebuffers) static inline bit_row<Length>& __restrict or_bits(bit_row<Length>& __restrict a, bit_row<Length> const& __restrict b)
+	__declspec(safebuffers) static inline bit_row<Length, bits>& __restrict or_bits(bit_row<Length, bits>& __restrict a, bit_row<Length, bits> const& __restrict b)
 	{
 		for (size_t bits = 0; bits < Length; bits += 256) { // by total bits (length), 256 bits / iteration
 
@@ -106,7 +102,7 @@ public:
 
 		return(a);
 	}
-	__declspec(safebuffers) static inline bit_row<Length>& __restrict xor_bits(bit_row<Length>& __restrict a, bit_row<Length> const& __restrict b)
+	__declspec(safebuffers) static inline bit_row<Length, bits>& __restrict xor_bits(bit_row<Length, bits>& __restrict a, bit_row<Length, bits> const& __restrict b)
 	{
 		for (size_t bits = 0; bits < Length; bits += 256) { // by total bits (length), 256 bits / iteration
 
@@ -123,8 +119,8 @@ public:
 	}
 };
 
-template<size_t const Length>
-bit_function size_t const bit_row<Length>::population_count() const
+template<size_t const Length, typename bits>
+bit_function size_t const bit_row<Length, bits>::population_count() const
 {
 	size_t count(0);
 	for (size_t block = 0; block < Stride; ++block) {
@@ -134,8 +130,8 @@ bit_function size_t const bit_row<Length>::population_count() const
 	return(count);
 }
 
-template<size_t const Length>
-bit_function bool const bit_row<Length>::read_bit(size_t const index) const
+template<size_t const Length, typename bits>
+bit_function bool const bit_row<Length, bits>::read_bit(size_t const index) const
 {
 	size_t const block(index >> element_bits);
 	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count) "(index % 64) == (index & (64-1))"
@@ -143,8 +139,8 @@ bit_function bool const bit_row<Length>::read_bit(size_t const index) const
 	return((_bits[block] & bit) == bit);
 }
 
-template<size_t const Length>
-bit_function void bit_row<Length>::set_bit(size_t const index)
+template<size_t const Length, typename bits>
+bit_function void bit_row<Length, bits>::set_bit(size_t const index)
 {
 	size_t const block(index >> element_bits);
 	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
@@ -153,8 +149,8 @@ bit_function void bit_row<Length>::set_bit(size_t const index)
 	_bits[block] |= bit;
 }
 
-template<size_t const Length>
-bit_function void bit_row<Length>::clear_bit(size_t const index)
+template<size_t const Length, typename bits>
+bit_function void bit_row<Length, bits>::clear_bit(size_t const index)
 {
 	size_t const block(index >> element_bits);
 	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
@@ -163,8 +159,8 @@ bit_function void bit_row<Length>::clear_bit(size_t const index)
 	_bits[block] &= (~bit);
 }
 
-template<size_t const Length>
-bit_function void bit_row<Length>::write_bit(size_t const index, bool const state)
+template<size_t const Length, typename bits>
+bit_function void bit_row<Length, bits>::write_bit(size_t const index, bool const state)
 {
 	size_t const block(index >> element_bits);
 	size_t const bit(1ull << (index & (element_count - 1ull))); // remainder, divisor is always power of two (element_count)
@@ -174,8 +170,8 @@ bit_function void bit_row<Length>::write_bit(size_t const index, bool const stat
 	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
 }
 
-template<size_t const Length>
-void bit_row<Length>::clear()
+template<size_t const Length, typename bits>
+void bit_row<Length, bits>::clear()
 {
 	if constexpr (Size > 4096) {
 		___memset_threaded<CACHE_LINE_BYTES>(_bits, 0, size());
@@ -185,21 +181,20 @@ void bit_row<Length>::clear()
 	}
 }
 
+// atomic version
+template<size_t const Length>
+using bit_row_atomic = bit_row<Length, std::atomic_size_t>;
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // bit_row_reference
-template<size_t const Length>  // must be divisable by 64 //
+template<size_t const Length, typename bits = size_t>  // must be divisable by 64 and either  size_t  -or-  std::atomic_size_t //
 struct no_vtable bit_row_reference
 {
-#ifdef BIT_ROW_ATOMIC
-	using bits = std::atomic_size_t;
-#else
-	using bits = size_t;
-#endif
-	static constexpr size_t const element_bits = bit_row<Length>::element_bits;
-	static constexpr size_t const element_count = bit_row<Length>::element_count;	// block size (64 = (1 << 6))
+	static constexpr size_t const element_bits = bit_row<Length, bits>::element_bits;
+	static constexpr size_t const element_count = bit_row<Length, bits>::element_count;	// block size (64 = (1 << 6))
 
-	static constexpr size_t const Stride = bit_row<Length>::Stride;	// number of blocks for each dimension
+	static constexpr size_t const Stride = bit_row<Length, bits>::Stride;	// number of blocks for each dimension
 public:
 	static constexpr size_t const total_bit_count = Length;
 	static constexpr size_t const Size = Stride * sizeof(bits);
@@ -215,9 +210,9 @@ public:
 	bit_function bits const* const __restrict data() const { return(_bits); }
 	bit_function bits* const __restrict		  data() { return(_bits); }
 
-	constexpr size_t const size() const { return(stride * sizeof(bits)); }
+	constexpr size_t const size() const { return(Size); }
 private:
-	bit_row_reference(bit_row<Length>& __restrict a, size_t const offset = 0)
+	bit_row_reference(bit_row<Length, bits>& __restrict a, size_t const offset = 0)
 		: _bits(a.data() + (offset >> element_bits)), _offset(offset & (element_count - 1ull)) // remainder, remeber a single bit represents a single index
 	{}
 private:
@@ -225,14 +220,14 @@ private:
 	size_t const           _offset;  // *this is like a count, not like an index
 public:
 	// static public methods that should be used for construction
-	__declspec(safebuffers) static inline bit_row_reference<Length> create(bit_row<Length>& __restrict a, size_t const offset)
+	__declspec(safebuffers) static inline bit_row_reference<Length, bits> create(bit_row<Length, bits>& __restrict a, size_t const offset)
 	{
 		return{ a, offset };
 	}
 };
 
-template<size_t const Length>
-bit_function bool const bit_row_reference<Length>::read_bit(size_t const index) const
+template<size_t const Length, typename bits>
+bit_function bool const bit_row_reference<Length, bits>::read_bit(size_t const index) const
 {
 	size_t const relative_index(index + _offset);
 	size_t const block(relative_index >> element_bits);
@@ -241,8 +236,8 @@ bit_function bool const bit_row_reference<Length>::read_bit(size_t const index) 
 	return((_bits[block] & bit) == bit);
 }
 
-template<size_t const Length>
-bit_function void bit_row_reference<Length>::set_bit(size_t const index)
+template<size_t const Length, typename bits>
+bit_function void bit_row_reference<Length, bits>::set_bit(size_t const index)
 {
 	size_t const relative_index(index + _offset);
 	size_t const block(relative_index >> element_bits);
@@ -252,8 +247,8 @@ bit_function void bit_row_reference<Length>::set_bit(size_t const index)
 	_bits[block] |= bit;
 }
 
-template<size_t const Length>
-bit_function void bit_row_reference<Length>::clear_bit(size_t const index)
+template<size_t const Length, typename bits>
+bit_function void bit_row_reference<Length, bits>::clear_bit(size_t const index)
 {
 	size_t const relative_index(index + _offset);
 	size_t const block(relative_index >> element_bits);
@@ -263,8 +258,8 @@ bit_function void bit_row_reference<Length>::clear_bit(size_t const index)
 	_bits[block] &= (~bit);
 }
 
-template<size_t const Length>
-bit_function void bit_row_reference<Length>::write_bit(size_t const index, bool const state)
+template<size_t const Length, typename bits>
+bit_function void bit_row_reference<Length, bits>::write_bit(size_t const index, bool const state)
 {
 	size_t const relative_index(index + _offset);
 	size_t const block(relative_index >> element_bits);
@@ -275,6 +270,6 @@ bit_function void bit_row_reference<Length>::write_bit(size_t const index, bool 
 	_bits[block] = (_bits[block] & ~bit) | (-state & bit);
 }
 
-
-
-
+// atomic version
+template<size_t const Length>
+using bit_row_reference_atomic = bit_row_reference<Length, std::atomic_size_t>;
