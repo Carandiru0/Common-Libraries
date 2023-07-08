@@ -438,13 +438,13 @@ public:
 			uint32_t imageOffset(0);
 			// *bugfix - (only affects .ktx2 files) apparently these chunks of data are optional, to get the correct image offset....
 			if (0 != header_data.v2.sgdOffset) { // image offset is after supercompression global data, IF PRESENT
-				imageOffset = header_data.v2.sgdOffset + header_data.v2.sgdLength;
+				imageOffset = (uint32_t)(header_data.v2.sgdOffset + header_data.v2.sgdLength);
 			}
 			else if (0 != header_data.v2.kvdOffset) { // image offset is after key value data, IF PRESENT
-				imageOffset = header_data.v2.kvdOffset + header_data.v2.kvdLength;
+				imageOffset = (uint32_t)(header_data.v2.kvdOffset + header_data.v2.kvdLength);
 			}
 			else if (0 != header_data.v2.dfdOffset) { // image offset is after data format descriptor data, IF PRESENT
-				imageOffset = header_data.v2.dfdOffset + header_data.v2.dfdLength;
+				imageOffset = (uint32_t)(header_data.v2.dfdOffset + header_data.v2.dfdLength);
 			}
 			else { // no extra data present, image data starts after header and the mipmap levels (variable size)
 				return; // ktx2 file is malformed, can't calculate start of image data without traversing the mipmap levels and the offsets & lengths it contains for each level.
